@@ -1072,6 +1072,101 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
 }
 
 // ---------------------------------------------------------------------------
+// Entity position updates for Room View
+// ---------------------------------------------------------------------------
+
+function updateEntityPositions(db: Database): void {
+  const AGENT_SPEED = 20;
+  const MONSTER_SPEED = 8;
+  const ROOM_WIDTH = 800;
+  const ROOM_HEIGHT = 450;
+  const ROOM_MARGIN = 40;
+
+  // Update agent positions - idle agents wander randomly
+  const agents = db.prepare(`
+    SELECT id, room_x, room_y, direction, status, current_action FROM agents
+    WHERE auto_play = 1 AND status != 'dead'
+  `).all() as any[];
+
+  for (const agent of agents) {
+    let x = agent.room_x ?? 400;
+    let y = agent.room_y ?? 250;
+
+    if (agent.status === 'combat') {
+      // In combat: stay put (minor jitter for visual effect)
+      continue;
+    }
+
+    // 30% chance to pick a new wander destination each tick
+    if (Math.random() < 0.3) {
+      const targetX = ROOM_MARGIN + Math.random() * (ROOM_WIDTH - ROOM_MARGIN * 2);
+      const targetY = ROOM_MARGIN + 60 + Math.random() * (ROOM_HEIGHT - ROOM_MARGIN * 2 - 60);
+      const dx = targetX - x;
+      const dy = targetY - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > AGENT_SPEED) {
+        x += (dx / dist) * AGENT_SPEED;
+        y += (dy / dist) * AGENT_SPEED;
+      } else {
+        x = targetX;
+        y = targetY;
+      }
+
+      const direction = dx > 0 ? 'right' : 'left';
+      db.prepare('UPDATE agents SET room_x = ?, room_y = ?, direction = ? WHERE id = ?')
+        .run(Math.round(x * 10) / 10, Math.round(y * 10) / 10, direction, agent.id);
+    }
+  }
+
+  // Update monster positions - wandering monsters move slowly
+  const monsters = db.prepare(`
+    SELECT am.id, am.room_x, am.room_y, am.direction, am.wander_target_x, am.wander_target_y
+    FROM active_monsters am
+  `).all() as any[];
+
+  for (const monster of monsters) {
+    let x = monster.room_x;
+    let y = monster.room_y;
+
+    // Initialize position if null
+    if (x == null || y == null) {
+      x = ROOM_MARGIN + Math.random() * (ROOM_WIDTH - ROOM_MARGIN * 2);
+      y = ROOM_MARGIN + 80 + Math.random() * (ROOM_HEIGHT - ROOM_MARGIN * 2 - 80);
+      db.prepare('UPDATE active_monsters SET room_x = ?, room_y = ? WHERE id = ?')
+        .run(Math.round(x * 10) / 10, Math.round(y * 10) / 10, monster.id);
+      continue;
+    }
+
+    let targetX = monster.wander_target_x;
+    let targetY = monster.wander_target_y;
+
+    // Pick new wander target if none or reached
+    if (targetX == null || targetY == null || (Math.abs(x - targetX) < MONSTER_SPEED && Math.abs(y - targetY) < MONSTER_SPEED)) {
+      // Wander within a small radius of current position
+      targetX = Math.max(ROOM_MARGIN, Math.min(ROOM_WIDTH - ROOM_MARGIN, x + (Math.random() - 0.5) * 120));
+      targetY = Math.max(ROOM_MARGIN + 60, Math.min(ROOM_HEIGHT - ROOM_MARGIN, y + (Math.random() - 0.5) * 80));
+    }
+
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > MONSTER_SPEED) {
+      x += (dx / dist) * MONSTER_SPEED;
+      y += (dy / dist) * MONSTER_SPEED;
+    } else {
+      x = targetX;
+      y = targetY;
+    }
+
+    const direction = dx > 0 ? 'right' : 'left';
+    db.prepare('UPDATE active_monsters SET room_x = ?, room_y = ?, direction = ?, wander_target_x = ?, wander_target_y = ? WHERE id = ?')
+      .run(Math.round(x * 10) / 10, Math.round(y * 10) / 10, direction, Math.round(targetX * 10) / 10, Math.round(targetY * 10) / 10, monster.id);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main export — called every 10 seconds from index.ts
 // ---------------------------------------------------------------------------
 
@@ -1115,6 +1210,9 @@ export function runAutoTick(db: Database): void {
       console.error(`Auto-tick error for ${agent.name}:`, (err as Error).message);
     }
   }
+
+  // Update entity positions for Room View
+  updateEntityPositions(db);
 }
 
 // Export doAttack for use by action routes (instant combat for manual API calls)

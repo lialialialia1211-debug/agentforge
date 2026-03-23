@@ -65,8 +65,10 @@
     .agent-lv { font-size: 10px; color: var(--text); }
     .agent-meta { font-size: 10px; color: var(--text); padding: 0 12px 2px; }
     .status-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .status-combat { background: rgba(248,81,73,0.15); color: var(--red); }
-    .status-idle    { background: rgba(63,185,80,0.12);  color: var(--green); }
+    .status-combat    { background: rgba(248,81,73,0.15); color: var(--red); }
+    .status-idle      { background: rgba(63,185,80,0.12);  color: var(--green); }
+    .status-traveling { background: rgba(88,166,255,0.12); color: var(--blue); }
+    .status-dead      { background: rgba(72,79,88,0.2);    color: var(--gray); }
     .hp-bar-wrap { margin: 4px 12px 3px; }
     .hp-bar-bg { background: var(--border); border-radius: 2px; height: 4px; overflow: hidden; }
     .hp-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
@@ -221,6 +223,40 @@
         50%      { opacity: 0; }
       }
     }
+
+    /* VIEW TABS */
+    .view-tabs { display: flex; gap: 0; }
+    .view-tab { font-size: 9px; font-weight: 700; font-family: var(--font); letter-spacing: 1.5px; color: var(--text); background: transparent; border: 1px solid var(--border); padding: 4px 10px; cursor: pointer; transition: all 0.15s; }
+    .view-tab:first-child { border-radius: 3px 0 0 3px; }
+    .view-tab:last-child { border-radius: 0 3px 3px 0; }
+    .view-tab + .view-tab { border-left: none; }
+    .view-tab.active { color: var(--orange); background: rgba(240,136,62,0.1); border-color: rgba(240,136,62,0.35); }
+    .view-tab:hover:not(.active) { background: rgba(255,255,255,0.03); }
+
+    /* ROOM VIEW */
+    .room-view { display: none; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+    .room-view.visible { display: flex; }
+    .room-canvas-wrap { flex: 1; min-height: 0; position: relative; background: #070b10; overflow: hidden; }
+    .room-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+    .room-selector { position: absolute; top: 8px; left: 8px; z-index: 5; }
+    .room-select { font-family: var(--font); font-size: 10px; color: var(--text); background: rgba(17,24,32,0.9); border: 1px solid var(--border); border-radius: 3px; padding: 4px 8px; cursor: pointer; outline: none; }
+    .room-select option { background: var(--bg2); color: var(--text); }
+    .room-bottom { display: grid; grid-template-columns: 1fr 1fr; height: 140px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .room-events { border-right: 1px solid var(--border); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .room-events::-webkit-scrollbar { width: 3px; }
+    .room-events::-webkit-scrollbar-thumb { background: var(--border); }
+    .room-events-header { padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 9px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 1.5px; }
+    .room-event-row { font-size: 10px; color: var(--text); padding: 2px 10px; border-bottom: 1px solid rgba(26,31,43,0.4); }
+    .room-nearby { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .room-nearby::-webkit-scrollbar { width: 3px; }
+    .room-nearby::-webkit-scrollbar-thumb { background: var(--border); }
+    .room-nearby-header { padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 9px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 1.5px; }
+    .room-entity-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 10px; border-bottom: 1px solid rgba(26,31,43,0.4); font-size: 10px; }
+    .room-entity-name { color: #c9d1d9; }
+    .room-entity-info { color: var(--text); font-size: 9px; }
+
+    /* ROOM ACTIVE */
+    .main-body.room-active { grid-template-columns: 1fr; }
   </style>
 </head>
 <body>
@@ -234,7 +270,11 @@
     <div class="header-right">
       <span class="tick-counter">TICK <span id="tickNum">0</span></span>
       <span class="agent-count-header">AGENTS <span id="headerAgentCount">0</span></span>
-      <button class="btn-spectate" id="btnSpectate">SPECTATE</button>
+      <div class="view-tabs">
+        <button class="view-tab active" id="tabWorldMap" onclick="switchDashboardView('worldmap')">WORLD MAP</button>
+        <button class="view-tab" id="tabRoom" onclick="switchDashboardView('room')">ROOM VIEW</button>
+        <button class="view-tab" id="tabSpectate" onclick="switchDashboardView('spectate')">SPECTATE</button>
+      </div>
       <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
   </div>
@@ -280,6 +320,31 @@
       </div>
     </div>
 
+    <!-- Room View -->
+    <div class="room-view" id="roomView">
+      <div class="room-canvas-wrap" id="roomCanvasWrap">
+        <canvas id="roomCanvas"></canvas>
+        <div class="room-selector">
+          <select class="room-select" id="roomSelect">
+            <option value="spawn_terminal">The Terminal</option>
+            <option value="npm_commons">NPM Commons</option>
+            <option value="pypi_shores">PyPI Shores</option>
+            <option value="crates_peaks">Crates Peaks</option>
+            <option value="maven_depths">Maven Depths</option>
+            <option value="package_bazaar">Package Bazaar</option>
+          </select>
+        </div>
+      </div>
+      <div class="room-bottom">
+        <div class="room-events" id="roomEvents">
+          <div class="room-events-header">Event Feed</div>
+        </div>
+        <div class="room-nearby" id="roomNearby">
+          <div class="room-nearby-header">Nearby</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Side Panel -->
     <div class="side-panel" id="sidePanel">
       <div class="side-header">
@@ -290,6 +355,12 @@
     </div>
   </div>
 </div>
+
+<script src="room/sprites.js"></script>
+<script src="room/effects.js"></script>
+<script src="room/scenes.js"></script>
+<script src="room/camera.js"></script>
+<script src="room/room-engine.js"></script>
 
 <script>
 (function() {
@@ -1438,7 +1509,7 @@ document.getElementById('backLink').addEventListener('click', function() {
   renderSidePanel();
 });
 
-document.getElementById('btnSpectate').addEventListener('click', toggleSpectate);
+/* btnSpectate replaced by view-tab buttons */
 
 document.addEventListener('keydown', function(e) {
   if (e.key === 'f' || e.key === 'F') toggleSpectate();
@@ -1446,9 +1517,11 @@ document.addEventListener('keydown', function(e) {
 });
 
 function toggleSpectate() {
-  spectateMode = !spectateMode;
-  if (!spectateMode) trackedAgent = null;
-  document.getElementById('app').classList.toggle('spectate', spectateMode);
+  if (currentDashView === 'spectate') {
+    switchDashboardView('worldmap');
+  } else {
+    switchDashboardView('spectate');
+  }
 }
 
 /* ===== ANIMATION LOOP ===== */
@@ -1480,6 +1553,180 @@ function poll() {
 
 setInterval(poll, 2000);
 poll();
+
+/* ===== ROOM VIEW ===== */
+var currentDashView = 'worldmap';
+
+function switchDashboardView(mode) {
+  currentDashView = mode;
+
+  document.querySelectorAll('.view-tab').forEach(function(tab) { tab.classList.remove('active'); });
+  if (mode === 'worldmap') document.getElementById('tabWorldMap').classList.add('active');
+  else if (mode === 'room') document.getElementById('tabRoom').classList.add('active');
+  else if (mode === 'spectate') document.getElementById('tabSpectate').classList.add('active');
+
+  var leftCol = document.getElementById('leftCol');
+  var roomView = document.getElementById('roomView');
+  var sidePanel = document.getElementById('sidePanel');
+  var app = document.getElementById('app');
+
+  leftCol.style.display = (mode === 'worldmap' || mode === 'spectate') ? 'flex' : 'none';
+  roomView.className = 'room-view' + (mode === 'room' ? ' visible' : '');
+  document.getElementById('mainBody').classList.toggle('room-active', mode === 'room');
+
+  if (mode === 'spectate') {
+    spectateMode = true;
+    app.classList.add('spectate');
+  } else {
+    spectateMode = false;
+    trackedAgent = null;
+    app.classList.remove('spectate');
+  }
+
+  if (mode === 'room') {
+    sidePanel.style.display = 'none';
+    initRoomView();
+  } else {
+    sidePanel.style.display = '';
+    if (typeof RoomEngine !== 'undefined') RoomEngine.stopLoop();
+  }
+
+  if (mode === 'worldmap') {
+    renderMap();
+    renderSidePanel();
+  }
+}
+
+function initRoomView() {
+  var canvas = document.getElementById('roomCanvas');
+  var wrap = document.getElementById('roomCanvasWrap');
+
+  RoomEngine.init(canvas);
+  RoomEngine.resize(wrap.offsetWidth, wrap.offsetHeight);
+
+  var select = document.getElementById('roomSelect');
+  var locationId = select.value;
+
+  if (state.agents.length > 0) {
+    var firstAgentLoc = state.agents[0].location;
+    if (firstAgentLoc) {
+      locationId = firstAgentLoc;
+      select.value = locationId;
+    }
+  }
+
+  RoomEngine.loadRoom(locationId);
+  RoomEngine.startLoop();
+}
+
+document.getElementById('roomSelect').addEventListener('change', function() {
+  if (currentDashView === 'room') {
+    RoomEngine.loadRoom(this.value);
+  }
+});
+
+if (typeof RoomEngine !== 'undefined') {
+  RoomEngine.onRoomEvent(function(event) {
+    if (event.type !== 'data' || !event.data) return;
+    updateRoomPanels(event.data);
+  });
+}
+
+function buildRoomEventRows(events, container) {
+  var header = document.createElement('div');
+  header.className = 'room-events-header';
+  header.textContent = 'Event Feed';
+  container.appendChild(header);
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var time = (ev.timestamp || '').slice(11, 19);
+    var row = document.createElement('div');
+    row.className = 'room-event-row';
+    var timeSpan = document.createElement('span');
+    timeSpan.style.cssText = 'color:var(--gray);margin-right:6px;';
+    timeSpan.textContent = time;
+    var badge = document.createElement('span');
+    badge.className = 'feed-badge badge-' + (ev.event_type || 'default');
+    badge.style.marginRight = '6px';
+    badge.textContent = ev.event_type || '';
+    var msg = document.createTextNode(ev.message || '');
+    row.appendChild(timeSpan);
+    row.appendChild(badge);
+    row.appendChild(msg);
+    container.appendChild(row);
+  }
+}
+
+function buildNearbyRows(ents, container) {
+  var header = document.createElement('div');
+  header.className = 'room-nearby-header';
+  header.textContent = 'Nearby';
+  container.appendChild(header);
+  (ents.agents || []).forEach(function(a) {
+    var color = CLASS_CONFIG[a.class] ? CLASS_CONFIG[a.class].color : '#8b949e';
+    var row = document.createElement('div');
+    row.className = 'room-entity-row';
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'room-entity-name';
+    nameSpan.style.color = color;
+    nameSpan.textContent = a.name;
+    var infoSpan = document.createElement('span');
+    infoSpan.className = 'room-entity-info';
+    infoSpan.textContent = 'Lv.' + a.level + ' ' + a.class + ' — ' + a.status;
+    row.appendChild(nameSpan); row.appendChild(infoSpan);
+    container.appendChild(row);
+  });
+  (ents.monsters || []).forEach(function(m) {
+    var row = document.createElement('div');
+    row.className = 'room-entity-row';
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'room-entity-name';
+    nameSpan.style.color = 'var(--red)';
+    nameSpan.textContent = m.name;
+    var infoSpan = document.createElement('span');
+    infoSpan.className = 'room-entity-info';
+    infoSpan.textContent = 'Lv.' + m.level + ' HP:' + m.hp + '/' + m.max_hp;
+    row.appendChild(nameSpan); row.appendChild(infoSpan);
+    container.appendChild(row);
+  });
+  (ents.npcs || []).forEach(function(n) {
+    var row = document.createElement('div');
+    row.className = 'room-entity-row';
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'room-entity-name';
+    nameSpan.style.color = 'var(--gold)';
+    nameSpan.textContent = n.name;
+    var infoSpan = document.createElement('span');
+    infoSpan.className = 'room-entity-info';
+    infoSpan.textContent = n.type;
+    row.appendChild(nameSpan); row.appendChild(infoSpan);
+    container.appendChild(row);
+  });
+}
+
+function updateRoomPanels(data) {
+  var eventsEl = document.getElementById('roomEvents');
+  while (eventsEl.firstChild) eventsEl.removeChild(eventsEl.firstChild);
+  buildRoomEventRows(data.recent_events || [], eventsEl);
+
+  var nearbyEl = document.getElementById('roomNearby');
+  while (nearbyEl.firstChild) nearbyEl.removeChild(nearbyEl.firstChild);
+  buildNearbyRows(data.entities || {}, nearbyEl);
+}
+
+window.addEventListener('resize', function() {
+  if (currentDashView === 'room') {
+    var wrap = document.getElementById('roomCanvasWrap');
+    RoomEngine.resize(wrap.offsetWidth, wrap.offsetHeight);
+  }
+});
+
+window.switchDashboardView = switchDashboardView;
+
+var _origOnLocClick = onLocClick;
+onLocClick = function(locId) {
+  _origOnLocClick(locId);
+};
 
 })();
 </script>

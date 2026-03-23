@@ -333,4 +333,16 @@ function createTables(db: Database.Database): void {
     db.exec("INSERT INTO game_log SELECT * FROM game_log_old3");
     db.exec("DROP TABLE game_log_old3");
   } catch {}
+
+  // Room position columns for agents
+  try { db.exec("ALTER TABLE agents ADD COLUMN room_x REAL DEFAULT 400"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN room_y REAL DEFAULT 250"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN direction TEXT DEFAULT 'right'"); } catch {}
+
+  // Room position columns for active_monsters
+  try { db.exec("ALTER TABLE active_monsters ADD COLUMN room_x REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_monsters ADD COLUMN room_y REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_monsters ADD COLUMN direction TEXT DEFAULT 'left'"); } catch {}
+  try { db.exec("ALTER TABLE active_monsters ADD COLUMN wander_target_x REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_monsters ADD COLUMN wander_target_y REAL"); } catch {}
 }

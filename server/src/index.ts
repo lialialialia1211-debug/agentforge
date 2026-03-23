@@ -19,6 +19,7 @@ import strategyRouter from './routes/strategy.js';
 import devEventRouter from './routes/dev-event.js';
 import heartbeatRouter from './routes/heartbeat.js';
 import claudeMdRouter from './routes/claude-md.js';
+import roomRouter from './routes/room.js';
 
 const app = express();
 app.use(cors());
@@ -39,6 +40,7 @@ app.use('/api', strategyRouter);   // POST /api/strategy
 app.use('/api', devEventRouter);   // POST /api/dev-event
 app.use('/api', heartbeatRouter);  // POST /api/heartbeat
 app.use('/api', claudeMdRouter);   // GET  /api/claude-md
+app.use('/api', roomRouter);       // GET /api/room/:locationId
 
 // Serve dashboard static files at root
 app.use(express.static(resolve(__dirname, '../../dashboard')));
