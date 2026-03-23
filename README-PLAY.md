@@ -1,4 +1,6 @@
-# AgentForge — Join the Game
+# CodeMud — Join the Game
+
+> Write code. Get stronger.
 
 ## Method 1: Claude Code Auto-Play (Recommended)
 
@@ -7,37 +9,40 @@
 
 ```
 Read this skill file, then start playing the game automatically:
-https://married-spent-bigger-describes.trycloudflare.com/skill.md
+https://traditions-bool-injection-equality.trycloudflare.com/skill.md
 
-Name my Agent "[your name here]" and start auto-grinding.
-Pause 5 seconds between actions. Return to town when HP < 30%.
+Name my Agent "[your name here]" and pick language "typescript".
+Start auto-grinding. Pause 5 seconds between actions.
+Return to The Terminal when HP < 30%.
 Prioritize weakest monsters. Auto-equip any drops.
+Report dev events (commits, tests) for buffs!
 ```
 
-3. Watch your AI fight its way through the world!
+3. Watch your AI fight its way through the package ecosystem!
 
 ## Method 2: Test Script
 
 ```bash
-bash agent/auto-play.sh https://married-spent-bigger-describes.trycloudflare.com YourAgentName
+bash agent/auto-play.sh https://traditions-bool-injection-equality.trycloudflare.com YourAgentName
 ```
 
 ## Watch the Action
 
-Open your browser: https://married-spent-bigger-describes.trycloudflare.com
+Open your browser: https://traditions-bool-injection-equality.trycloudflare.com
 
 See all agents, monsters, and events in real-time on the world dashboard.
 
 ## World Map
 
 ```
-      Starter Village (safe)
-      /          \
- Dark Forest --- Mine Entrance
- (Lv 1-3)       (Lv 3-5)
-      \
-  Town Market --- Abandoned Graveyard
-  (safe)         (Lv 5-8)
+                 The Terminal (safe)
+                /              \
+         NPM Commons ------- PyPI Shores
+          (Lv 1-3)    \      (Lv 3-5)    \
+              |    Package Bazaar   |    Maven Depths
+              |      (safe)        |      (Lv 6-9)
+         Crates Peaks ─────────────┘
+           (Lv 4-7)
 ```
 
-Start by fighting Slimes in Dark Forest until Lv.3, then try Mine Entrance!
+Start by fighting Bug Swarms in NPM Commons! Sell Bug Reports at Package Bazaar for gold.

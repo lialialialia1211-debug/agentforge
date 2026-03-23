@@ -1,7 +1,7 @@
-# AgentForge — Claude Code 行為規範
+# CodeMud — Claude Code 行為規範
 
 ## 專案簡介
-AgentForge 是 AI Agent MMORPG。伺服器提供 REST API，AI Agent 透過 HTTP 請求自主遊玩。
+CodeMud 是給開發者的 AI Agent MMORPG。伺服器提供 REST API，AI Agent 透過 HTTP 請求自主遊玩。Write code, get stronger.
 
 ## 開發規範
 - 使用 TypeScript strict mode

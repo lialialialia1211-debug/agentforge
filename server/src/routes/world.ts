@@ -49,6 +49,28 @@ router.get('/status', authMiddleware, (req: Request, res: Response) => {
       skills[s.skill_name] = { level: s.level, exp: s.exp, exp_to_next: expToNext, bonus };
     }
 
+    // Active buffs/debuffs
+    const activeBuffs = db.prepare(
+      "SELECT buff_name, buff_type, effect, expires_at FROM agent_buffs WHERE agent_id = ? AND expires_at > datetime('now')"
+    ).all(agent.id) as { buff_name: string; buff_type: string; effect: string; expires_at: string }[];
+
+    const formattedBuffs = activeBuffs.map(b => {
+      const eff = JSON.parse(b.effect);
+      const expiresMs = new Date(b.expires_at + 'Z').getTime() - Date.now();
+      const minutes = Math.floor(expiresMs / 60000);
+      const seconds = Math.floor((expiresMs % 60000) / 1000);
+      let effectStr = '';
+      if (eff.stat === 'attack') effectStr = `ATK +${Math.round(eff.modifier * 100)}%`;
+      else if (eff.stat === 'defense') effectStr = `DEF +${Math.round(eff.modifier * 100)}%`;
+      else if (eff.stat === 'chaos') effectStr = `${Math.round(eff.modifier * 100)}% chance to miss`;
+      return {
+        name: b.buff_name,
+        type: b.buff_type,
+        effect: effectStr,
+        expires_in: `${minutes}m ${seconds}s`,
+      };
+    });
+
     // Pending PVP challenges (where this agent is the target)
     const pendingChallenges = db.prepare(`
       SELECT pc.id as challenge_id, a.name as from_name, a.level as from_level, pc.created_at
@@ -81,9 +103,20 @@ router.get('/status', authMiddleware, (req: Request, res: Response) => {
         inventory: inventoryRows,
         effective_attack: agent.attack + bonusAttack,
         effective_defense: agent.defense + bonusDefense,
+        class: agent.class,
+        primary_language: agent.primary_language,
+        stats: {
+          str: agent.str,
+          int: agent.int_stat,
+          agi: agent.agi,
+          vit: agent.vit,
+          spd: agent.spd,
+          cha: agent.cha,
+        },
         skills,
         pending_challenges: pendingChallenges,
         pending_trades: formattedTrades,
+        active_buffs: formattedBuffs,
       },
     };
     res.json(response);

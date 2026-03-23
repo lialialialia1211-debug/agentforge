@@ -150,7 +150,7 @@ router.post('/shop', authMiddleware, (req: Request, res: Response) => {
         logEvent(
           agent.id,
           'shop',
-          `${agent.name} bought ${quantity}x ${shopEntry.name} for ${totalCost} gold.`,
+          `${agent.name} 買了 ${quantity} 個 ${shopEntry.name}，花費 ${totalCost} 金幣。`,
           agent.location_id,
         );
 
@@ -160,7 +160,7 @@ router.post('/shop', authMiddleware, (req: Request, res: Response) => {
           logEvent(
             agent.id,
             'skill',
-            `${agent.name}'s trade skill reached level ${skillResult.newLevel}!`,
+            `${agent.name} 的交易技能升到 ${skillResult.newLevel} 級！`,
             agent.location_id,
           );
         }
@@ -241,7 +241,7 @@ router.post('/shop', authMiddleware, (req: Request, res: Response) => {
         logEvent(
           agent.id,
           'shop',
-          `${agent.name} sold ${quantity}x ${invEntry.name} for ${totalGold} gold.`,
+          `${agent.name} 賣出 ${quantity} 個 ${invEntry.name}，獲得 ${totalGold} 金幣。`,
           agent.location_id,
         );
 
@@ -251,7 +251,7 @@ router.post('/shop', authMiddleware, (req: Request, res: Response) => {
           logEvent(
             agent.id,
             'skill',
-            `${agent.name}'s trade skill reached level ${skillResult.newLevel}!`,
+            `${agent.name} 的交易技能升到 ${skillResult.newLevel} 級！`,
             agent.location_id,
           );
         }

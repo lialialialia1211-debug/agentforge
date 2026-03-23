@@ -159,7 +159,7 @@ router.post('/trade', authMiddleware, (req: Request, res: Response) => {
         request_gold,
       );
 
-      logEvent(agent.id, 'trade', `${agent.name} sent a trade offer to ${target.name}.`, agent.location_id);
+      logEvent(agent.id, 'trade', `${agent.name} 向 ${target.name} 發送了交易請求。`, agent.location_id);
 
       const response: ApiResponse = {
         ok: true,
@@ -276,7 +276,7 @@ router.post('/trade', authMiddleware, (req: Request, res: Response) => {
 
       executeSwap();
 
-      const tradeMessage = `${offerer.name} and ${agent.name} completed a trade.`;
+      const tradeMessage = `${offerer.name} 與 ${agent.name} 完成了交易。`;
       logEvent(offerer.id, 'trade', tradeMessage, offerer.location_id);
       logEvent(agent.id, 'trade', tradeMessage, agent.location_id);
 

@@ -22,6 +22,14 @@ interface AgentWithStrategy {
   location_id: string;
   status: string;
   auto_play: number;
+  class: string;
+  primary_language: string;
+  str: number;
+  int_stat: number;
+  agi: number;
+  vit: number;
+  spd: number;
+  cha: number;
   // strategy fields (may be null if no strategy row)
   combat_style: 'aggressive' | 'balanced' | 'cautious' | null;
   hp_retreat_threshold: number | null;
@@ -68,6 +76,31 @@ interface PvpChallengeRow {
   challenger_id: string;
 }
 
+interface ActiveBattleRow {
+  id: string;
+  agent_id: string;
+  monster_id: string | null;
+  opponent_id: string | null;
+  agent_hp: number;
+  monster_hp: number;
+  monster_hp_start: number | null;
+  monster_name: string;
+  monster_level: number;
+  monster_attack: number;
+  monster_defense: number;
+  rounds: string;
+  status: string;
+  location_id: string;
+  created_at: string;
+}
+
+interface BattleRound {
+  attacker: 'agent' | 'monster';
+  damage: number;
+  crit: boolean;
+  message: string;
+}
+
 // ---------------------------------------------------------------------------
 // Log helper
 // ---------------------------------------------------------------------------
@@ -75,7 +108,7 @@ interface PvpChallengeRow {
 function logEvent(
   db: Database,
   agentId: string,
-  eventType: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'pvp' | 'shop' | 'skill',
+  eventType: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'pvp' | 'shop' | 'skill' | 'dev' | 'buff',
   message: string,
   locationId: string | null,
 ): void {
@@ -123,10 +156,24 @@ function getEffectiveStats(db: Database, agent: AgentWithStrategy): { effectiveA
     bonusDefense += item.defense_bonus;
   }
   const combatBonus = getCombatBonus(db, agent.id);
-  return {
-    effectiveAttack: agent.attack + bonusAttack + combatBonus.attackBonus,
-    effectiveDefense: agent.defense + bonusDefense,
-  };
+  let effectiveAttack = agent.attack + bonusAttack + combatBonus.attackBonus;
+  let effectiveDefense = agent.defense + bonusDefense;
+
+  // Apply active buffs
+  const activeBuffs = db.prepare(
+    "SELECT buff_name, effect FROM agent_buffs WHERE agent_id = ? AND expires_at > datetime('now')"
+  ).all(agent.id) as { buff_name: string; effect: string }[];
+
+  for (const buff of activeBuffs) {
+    const eff = JSON.parse(buff.effect);
+    if (eff.stat === 'attack') {
+      effectiveAttack = Math.floor(effectiveAttack * (1 + eff.modifier));
+    } else if (eff.stat === 'defense') {
+      effectiveDefense = Math.floor(effectiveDefense * (1 + eff.modifier));
+    }
+  }
+
+  return { effectiveAttack, effectiveDefense };
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +188,12 @@ function usePotion(db: Database, agent: AgentWithStrategy): boolean {
     FROM inventory inv
     JOIN items it ON inv.item_id = it.id
     WHERE inv.agent_id = ? AND inv.equipped = 0
-      AND inv.item_id IN ('hp_potion_m', 'hp_potion_s')
+      AND inv.item_id IN ('hotfix_elixir', 'debug_potion')
     ORDER BY it.hp_restore DESC
     LIMIT 1
   `).get(agent.id) as { id: string; quantity: number; item_id: string; hp_restore: number; name: string } | undefined;
 
-  if (!potion) return false;
+  if (!potion || potion.hp_restore === 0) return false;
 
   const newHp = Math.min(agent.max_hp, agent.hp + potion.hp_restore);
 
@@ -158,7 +205,7 @@ function usePotion(db: Database, agent: AgentWithStrategy): boolean {
   }
 
   db.prepare(`UPDATE agents SET hp = ?, updated_at = datetime('now') WHERE id = ?`).run(newHp, agent.id);
-  logEvent(db, agent.id, 'combat', `${agent.name} used ${potion.name} and restored ${newHp - agent.hp} HP. (HP: ${newHp}/${agent.max_hp})`, agent.location_id);
+  logEvent(db, agent.id, 'combat', `${agent.name} 使用了 ${potion.name}，恢復 ${newHp - agent.hp} HP（HP: ${newHp}/${agent.max_hp}）`, agent.location_id);
   return true;
 }
 
@@ -167,8 +214,9 @@ function usePotion(db: Database, agent: AgentWithStrategy): boolean {
 // ---------------------------------------------------------------------------
 
 function doRest(db: Database, agent: AgentWithStrategy): void {
-  db.prepare(`UPDATE agents SET hp = max_hp, status = 'idle', updated_at = datetime('now') WHERE id = ?`).run(agent.id);
-  logEvent(db, agent.id, 'combat', `${agent.name} rested and recovered to full HP.`, agent.location_id);
+  db.prepare(`UPDATE agents SET hp = max_hp, status = 'idle', current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(JSON.stringify({ type: 'idle' }), agent.id);
+  logEvent(db, agent.id, 'combat', `${agent.name} 休息完畢，HP 全滿。`, agent.location_id);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,13 +227,13 @@ function moveTowardsTown(db: Database, agent: AgentWithStrategy, currentLocation
   const connectedIds: string[] = JSON.parse(currentLocation.connected_to);
   if (connectedIds.length === 0) return;
 
-  // Priority: starter_village > town_market > any town
+  // Priority: spawn_terminal > package_bazaar > any town
   let destination: string | null = null;
 
-  if (connectedIds.includes('starter_village')) {
-    destination = 'starter_village';
-  } else if (connectedIds.includes('town_market')) {
-    destination = 'town_market';
+  if (connectedIds.includes('spawn_terminal')) {
+    destination = 'spawn_terminal';
+  } else if (connectedIds.includes('package_bazaar')) {
+    destination = 'package_bazaar';
   } else {
     // Check if any connected location is a town
     for (const id of connectedIds) {
@@ -204,14 +252,16 @@ function moveTowardsTown(db: Database, agent: AgentWithStrategy, currentLocation
   const destLocation = db.prepare('SELECT * FROM locations WHERE id = ?').get(destination) as LocationRow | undefined;
   if (!destLocation) return;
 
-  db.prepare(`UPDATE agents SET location_id = ?, updated_at = datetime('now') WHERE id = ?`).run(destination, agent.id);
+  db.prepare(`UPDATE agents SET previous_location_id = location_id WHERE id = ?`).run(agent.id);
+  db.prepare(`UPDATE agents SET location_id = ?, current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(destination, JSON.stringify({ type: 'moving', from: currentLocation.name, to: destLocation.name }), agent.id);
 
   const scoutResult = grantSkillExp(db, agent.id, 'scout', 1);
   if (scoutResult?.leveled) {
-    logEvent(db, agent.id, 'skill', `${agent.name}'s scout skill reached level ${scoutResult.newLevel}!`, destination);
+    logEvent(db, agent.id, 'skill', `${agent.name} 的偵察技能升到 ${scoutResult.newLevel} 級！`, destination);
   }
 
-  logEvent(db, agent.id, 'move', `${agent.name} retreated from ${currentLocation.name} to ${destLocation.name}.`, destination);
+  logEvent(db, agent.id, 'move', `${agent.name} 從 ${currentLocation.name} 撤退到 ${destLocation.name}。`, destination);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,17 +269,20 @@ function moveTowardsTown(db: Database, agent: AgentWithStrategy, currentLocation
 // ---------------------------------------------------------------------------
 
 function doMove(db: Database, agent: AgentWithStrategy, destinationId: string): void {
+  const currentLocation = db.prepare('SELECT * FROM locations WHERE id = ?').get(agent.location_id) as LocationRow | undefined;
   const destLocation = db.prepare('SELECT * FROM locations WHERE id = ?').get(destinationId) as LocationRow | undefined;
   if (!destLocation) return;
 
-  db.prepare(`UPDATE agents SET location_id = ?, updated_at = datetime('now') WHERE id = ?`).run(destinationId, agent.id);
+  db.prepare(`UPDATE agents SET previous_location_id = location_id WHERE id = ?`).run(agent.id);
+  db.prepare(`UPDATE agents SET location_id = ?, current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(destinationId, JSON.stringify({ type: 'moving', from: currentLocation?.name ?? agent.location_id, to: destLocation.name }), agent.id);
 
   const scoutResult = grantSkillExp(db, agent.id, 'scout', 1);
   if (scoutResult?.leveled) {
-    logEvent(db, agent.id, 'skill', `${agent.name}'s scout skill reached level ${scoutResult.newLevel}!`, destinationId);
+    logEvent(db, agent.id, 'skill', `${agent.name} 的偵察技能升到 ${scoutResult.newLevel} 級！`, destinationId);
   }
 
-  logEvent(db, agent.id, 'move', `${agent.name} moved to ${destLocation.name}.`, destinationId);
+  logEvent(db, agent.id, 'move', `${agent.name} 移動到 ${destLocation.name}。`, destinationId);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +310,7 @@ function sellMaterials(db: Database, agent: AgentWithStrategy): boolean {
       totalGold += earned;
 
       db.prepare('DELETE FROM inventory WHERE id = ?').run(mat.id);
-      logEvent(db, agent.id, 'shop', `${agent.name} sold ${mat.quantity}x ${mat.name} for ${earned} gold.`, agent.location_id);
+      logEvent(db, agent.id, 'shop', `${agent.name} 賣出 ${mat.quantity} 個 ${mat.name}，獲得 ${earned} 金幣。`, agent.location_id);
     }
     db.prepare(`UPDATE agents SET gold = gold + ?, updated_at = datetime('now') WHERE id = ?`).run(totalGold, agent.id);
   });
@@ -266,7 +319,7 @@ function sellMaterials(db: Database, agent: AgentWithStrategy): boolean {
 
   const tradeSkillResult = grantSkillExp(db, agent.id, 'trade', 1);
   if (tradeSkillResult?.leveled) {
-    logEvent(db, agent.id, 'skill', `${agent.name}'s trade skill reached level ${tradeSkillResult.newLevel}!`, agent.location_id);
+    logEvent(db, agent.id, 'skill', `${agent.name} 的交易技能升到 ${tradeSkillResult.newLevel} 級！`, agent.location_id);
   }
 
   return true;
@@ -288,11 +341,11 @@ function buyPotionsIfNeeded(db: Database, agent: AgentWithStrategy): boolean {
 
   if (potionCount >= 3) return false;
 
-  // Try to buy hp_potion_s from current shop
+  // Try to buy debug_potion from current shop
   const shopEntry = db.prepare(`
     SELECT si.id, si.price, si.stock
     FROM shop_inventory si
-    WHERE si.location_id = ? AND si.item_id = 'hp_potion_s'
+    WHERE si.location_id = ? AND si.item_id = 'debug_potion'
   `).get(agent.location_id) as { id: string; price: number; stock: number } | undefined;
 
   if (!shopEntry) return false;
@@ -315,28 +368,28 @@ function buyPotionsIfNeeded(db: Database, agent: AgentWithStrategy): boolean {
     const actualCost = discountedPrice * buyQty;
     const buyTx = db.transaction(() => {
       db.prepare(`UPDATE agents SET gold = gold - ?, updated_at = datetime('now') WHERE id = ?`).run(actualCost, agent.id);
-      addToInventory(db, agent.id, 'hp_potion_s', buyQty);
+      addToInventory(db, agent.id, 'debug_potion', buyQty);
       if (shopEntry.stock !== -1) {
         db.prepare(`UPDATE shop_inventory SET stock = stock - ? WHERE id = ?`).run(buyQty, shopEntry.id);
       }
-      logEvent(db, agent.id, 'shop', `${agent.name} bought ${buyQty}x Small HP Potion for ${actualCost} gold.`, agent.location_id);
+      logEvent(db, agent.id, 'shop', `${agent.name} 買了 ${buyQty} 個 Debug Potion，花費 ${actualCost} 金幣。`, agent.location_id);
     });
     buyTx();
   } else {
     const buyTx = db.transaction(() => {
       db.prepare(`UPDATE agents SET gold = gold - ?, updated_at = datetime('now') WHERE id = ?`).run(totalCost, agent.id);
-      addToInventory(db, agent.id, 'hp_potion_s', toBuy);
+      addToInventory(db, agent.id, 'debug_potion', toBuy);
       if (shopEntry.stock !== -1) {
         db.prepare(`UPDATE shop_inventory SET stock = stock - ? WHERE id = ?`).run(toBuy, shopEntry.id);
       }
-      logEvent(db, agent.id, 'shop', `${agent.name} bought ${toBuy}x Small HP Potion for ${totalCost} gold.`, agent.location_id);
+      logEvent(db, agent.id, 'shop', `${agent.name} 買了 ${toBuy} 個 Debug Potion，花費 ${totalCost} 金幣。`, agent.location_id);
     });
     buyTx();
   }
 
   const tradeSkillResult = grantSkillExp(db, agent.id, 'trade', 1);
   if (tradeSkillResult?.leveled) {
-    logEvent(db, agent.id, 'skill', `${agent.name}'s trade skill reached level ${tradeSkillResult.newLevel}!`, agent.location_id);
+    logEvent(db, agent.id, 'skill', `${agent.name} 的交易技能升到 ${tradeSkillResult.newLevel} 級！`, agent.location_id);
   }
 
   return true;
@@ -377,12 +430,15 @@ function pickZone(db: Database, agent: AgentWithStrategy, currentLocation: Locat
   if (!targetZoneId) {
     // Auto zone selection based on level
     if (agent.level <= 2) {
-      targetZoneId = connectedIds.includes('dark_forest') ? 'dark_forest' : connectedIds[0];
+      targetZoneId = connectedIds.includes('npm_commons') ? 'npm_commons' : connectedIds[0];
     } else if (agent.level <= 4) {
-      const candidates = connectedIds.filter((id) => id === 'dark_forest' || id === 'mine_entrance');
+      const candidates = connectedIds.filter((id) => id === 'npm_commons' || id === 'pypi_shores');
+      targetZoneId = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : connectedIds[0];
+    } else if (agent.level <= 6) {
+      const candidates = connectedIds.filter((id) => id === 'pypi_shores' || id === 'crates_peaks');
       targetZoneId = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : connectedIds[0];
     } else {
-      const highZones = ['mine_entrance', 'abandoned_graveyard'];
+      const highZones = ['crates_peaks', 'maven_depths'];
       const candidates = connectedIds.filter((id) => highZones.includes(id));
       targetZoneId = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : connectedIds[0];
     }
@@ -441,7 +497,236 @@ function pickTarget(monsters: MonsterRow[], agent: AgentWithStrategy): MonsterRo
 }
 
 // ---------------------------------------------------------------------------
-// Helper: doAttack — fight a monster, resolve outcome
+// Helper: calcSingleHit — calculate damage for one hit
+// ---------------------------------------------------------------------------
+
+function calcSingleHit(attackPower: number, defense: number): number {
+  const base = attackPower - defense * 0.5;
+  const effective = Math.max(1, base);
+  const variance = 0.8 + Math.random() * 0.4;
+  return Math.max(1, Math.round(effective * variance));
+}
+
+// ---------------------------------------------------------------------------
+// Helper: resolveVictory — end battle with agent winning
+// ---------------------------------------------------------------------------
+
+function resolveVictory(
+  db: Database,
+  agent: AgentWithStrategy,
+  battle: ActiveBattleRow,
+  rounds: BattleRound[],
+  newAgentHp: number,
+): void {
+  // Look up the monster template for rewards (we need exp/gold from template)
+  const monsterTemplate = battle.monster_id
+    ? db.prepare(`
+        SELECT mt.exp_reward, mt.gold_reward_min, mt.gold_reward_max, mt.loot_table
+        FROM active_monsters am
+        JOIN monster_templates mt ON am.template_id = mt.id
+        WHERE am.id = ?
+      `).get(battle.monster_id) as { exp_reward: number; gold_reward_min: number; gold_reward_max: number; loot_table: string | null } | undefined
+    : undefined;
+
+  const expGained = monsterTemplate?.exp_reward ?? 5;
+  const goldGained = monsterTemplate
+    ? monsterTemplate.gold_reward_min + Math.floor(Math.random() * (monsterTemplate.gold_reward_max - monsterTemplate.gold_reward_min + 1))
+    : 3;
+  const lootTable = monsterTemplate?.loot_table ?? null;
+
+  const victoryTx = db.transaction(() => {
+    // Delete battle record
+    db.prepare('DELETE FROM active_battles WHERE id = ?').run(battle.id);
+
+    // Delete active monster
+    if (battle.monster_id) {
+      db.prepare('DELETE FROM active_monsters WHERE id = ?').run(battle.monster_id);
+    }
+
+    // Roll loot
+    const drops = rollLoot(lootTable);
+    for (const drop of drops) {
+      addToInventory(db, agent.id, drop.item_id, drop.quantity);
+    }
+
+    // Compute level-up
+    let newExp = agent.exp + expGained;
+    let newLevel = agent.level;
+    let newMaxHp = agent.max_hp;
+    let newAttack = agent.attack;
+    let newDefense = agent.defense;
+    let finalHp = newAgentHp;
+    let leveled = false;
+    let expToNext = agent.exp_to_next;
+
+    while (newExp >= expToNext) {
+      newExp -= expToNext;
+      newLevel++;
+      newMaxHp += 10 + (agent.vit || 5);
+      newAttack += 3;
+      newDefense += 2;
+      finalHp = newMaxHp; // Full HP on level up
+      leveled = true;
+      expToNext = Math.floor(100 * newLevel * 1.5);
+    }
+
+    // Update agent
+    db.prepare(`
+      UPDATE agents
+      SET hp = ?, max_hp = ?, attack = ?, defense = ?, gold = gold + ?,
+          exp = ?, exp_to_next = ?, level = ?, status = 'idle',
+          current_action = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      finalHp, newMaxHp, newAttack, newDefense, goldGained,
+      newExp, expToNext, newLevel,
+      JSON.stringify({ type: 'idle' }),
+      agent.id
+    );
+
+    logEvent(db, agent.id, 'combat', `${agent.name} 擊敗了 ${battle.monster_name}，獲得 ${expGained} EXP、${goldGained} 金幣。`, battle.location_id);
+
+    if (drops.length > 0) {
+      const dropNames = drops.map((d) => d.item_id).join(', ');
+      logEvent(db, agent.id, 'loot', `${agent.name} 拾取了 ${dropNames}。`, battle.location_id);
+    }
+
+    if (leveled) {
+      logEvent(db, agent.id, 'levelup', `${agent.name} 升級到 Lv.${newLevel}！`, battle.location_id);
+    }
+  });
+
+  victoryTx();
+
+  // Combat skill exp (outside transaction since it has its own logic)
+  const skillResult = grantSkillExp(db, agent.id, 'combat', 1);
+  if (skillResult?.leveled) {
+    logEvent(db, agent.id, 'skill', `${agent.name} 的戰鬥技能升到 ${skillResult.newLevel} 級！`, battle.location_id);
+  }
+
+  // Auto-equip if enabled
+  if (agent.auto_equip) {
+    autoEquip(db, agent);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: resolveDefeat — end battle with agent losing
+// ---------------------------------------------------------------------------
+
+function resolveDefeat(
+  db: Database,
+  agent: AgentWithStrategy,
+  battle: ActiveBattleRow,
+): void {
+  const goldLost = Math.min(100, Math.max(1, Math.floor(agent.gold * 0.1)));
+  const respawnHp = Math.floor(agent.max_hp * 0.5);
+
+  const defeatTx = db.transaction(() => {
+    // Delete battle record
+    db.prepare('DELETE FROM active_battles WHERE id = ?').run(battle.id);
+
+    db.prepare(`
+      UPDATE agents
+      SET hp = ?, gold = gold - ?, location_id = 'spawn_terminal',
+          status = 'idle', current_action = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(respawnHp, goldLost, JSON.stringify({ type: 'idle' }), agent.id);
+
+    logEvent(db, agent.id, 'death', `${agent.name} 被 ${battle.monster_name} 擊殺，損失 ${goldLost} 金幣，在 The Terminal 重生。`, battle.location_id);
+  });
+
+  defeatTx();
+}
+
+// ---------------------------------------------------------------------------
+// Helper: tickBattle — execute ONE round of an active battle
+// ---------------------------------------------------------------------------
+
+function tickBattle(db: Database, agent: AgentWithStrategy, battle: ActiveBattleRow): void {
+  const rounds: BattleRound[] = JSON.parse(battle.rounds);
+
+  // Get effective stats (with buffs)
+  const { effectiveAttack, effectiveDefense } = getEffectiveStats(db, agent);
+
+  // Agent attacks monster
+  let agentDmg = calcSingleHit(effectiveAttack + (agent.str || 5) * 2, battle.monster_defense);
+
+  // Check crit
+  const agi = agent.agi || 5;
+  let isCrit = false;
+  if (Math.random() < agi * 0.02) {
+    isCrit = true;
+    agentDmg = Math.floor(agentDmg * 1.5);
+  }
+
+  const newMonsterHp = Math.max(0, battle.monster_hp - agentDmg);
+
+  rounds.push({
+    attacker: 'agent',
+    damage: agentDmg,
+    crit: isCrit,
+    message: `${agent.name} 攻擊 ${battle.monster_name}，造成 ${agentDmg} 傷害${isCrit ? '（暴擊！）' : ''}！`,
+  });
+
+  // Check if monster died
+  if (newMonsterHp <= 0) {
+    resolveVictory(db, agent, battle, rounds, agent.hp);
+    return;
+  }
+
+  // Monster attacks agent
+  const monsterDmg = calcSingleHit(battle.monster_attack, effectiveDefense);
+  const newAgentHp = Math.max(0, agent.hp - monsterDmg);
+
+  rounds.push({
+    attacker: 'monster',
+    damage: monsterDmg,
+    crit: false,
+    message: `${battle.monster_name} 反擊，造成 ${monsterDmg} 傷害。`,
+  });
+
+  // Check if agent died
+  if (newAgentHp <= 0) {
+    resolveDefeat(db, agent, battle);
+    return;
+  }
+
+  // Battle continues — update state
+  db.prepare(`UPDATE active_battles SET agent_hp = ?, monster_hp = ?, rounds = ? WHERE id = ?`)
+    .run(newAgentHp, newMonsterHp, JSON.stringify(rounds), battle.id);
+  db.prepare(`UPDATE agents SET hp = ?, status = 'combat', current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(newAgentHp, JSON.stringify({
+      type: 'attacking',
+      target: battle.monster_name,
+      target_hp: newMonsterHp,
+      target_max_hp: battle.monster_hp_start ?? battle.monster_hp,
+    }), agent.id);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: startBattle — create a new active_battle and execute first round
+// ---------------------------------------------------------------------------
+
+function startBattle(db: Database, agent: AgentWithStrategy, monster: MonsterRow): void {
+  const battleId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO active_battles (id, agent_id, monster_id, agent_hp, monster_hp, monster_hp_start, monster_name, monster_level, monster_attack, monster_defense, rounds, status, location_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'in_progress', ?)
+  `).run(battleId, agent.id, monster.id, agent.hp, monster.current_hp, monster.current_hp, monster.name, monster.level, monster.attack, monster.defense, agent.location_id);
+
+  db.prepare(`UPDATE agents SET status = 'combat', current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(JSON.stringify({ type: 'attacking', target: monster.name, target_hp: monster.current_hp, target_max_hp: monster.current_hp }), agent.id);
+
+  logEvent(db, agent.id, 'combat', `${agent.name} 向 ${monster.name} 發起攻擊！`, agent.location_id);
+
+  // Do NOT execute first round here — wait for next tick
+  // This ensures dashboard can see the battle before it resolves
+}
+
+// ---------------------------------------------------------------------------
+// Helper: doAttack (legacy) — kept for compatibility with manual API calls
+// Resolves entire combat instantly (used by /api/attack route)
 // ---------------------------------------------------------------------------
 
 function doAttack(db: Database, agent: AgentWithStrategy, monster: MonsterRow): void {
@@ -457,6 +742,7 @@ function doAttack(db: Database, agent: AgentWithStrategy, monster: MonsterRow): 
       attack: monster.attack,
       defense: monster.defense,
     },
+    { str: agent.str, agi: agent.agi, spd: agent.spd },
   );
 
   db.prepare(`UPDATE agents SET status = 'combat', updated_at = datetime('now') WHERE id = ?`).run(agent.id);
@@ -483,10 +769,10 @@ function doAttack(db: Database, agent: AgentWithStrategy, monster: MonsterRow): 
       while (newExp >= expToNext) {
         newExp -= expToNext;
         newLevel++;
-        newMaxHp += 15;
+        newMaxHp += 10 + (agent.vit || 5);
         newAttack += 3;
         newDefense += 2;
-        newHp = newMaxHp; // Full HP on level up
+        newHp = newMaxHp;
         leveled = true;
         expToNext = Math.floor(100 * newLevel * 1.5);
       }
@@ -505,21 +791,21 @@ function doAttack(db: Database, agent: AgentWithStrategy, monster: MonsterRow): 
         WHERE id = ?
       `).run(newHp, newMaxHp, newAttack, newDefense, goldGained, newExp, expToNext, newLevel, agent.id);
 
-      logEvent(db, agent.id, 'combat', `${agent.name} defeated ${monster.name}. Gained ${expGained} EXP, ${goldGained} gold.`, agent.location_id);
+      logEvent(db, agent.id, 'combat', `${agent.name} 擊敗了 ${monster.name}，獲得 ${expGained} EXP、${goldGained} 金幣。`, agent.location_id);
 
       if (drops.length > 0) {
         const dropNames = drops.map((d) => d.item_id).join(', ');
-        logEvent(db, agent.id, 'loot', `${agent.name} looted: ${dropNames}.`, agent.location_id);
+        logEvent(db, agent.id, 'loot', `${agent.name} 拾取了 ${dropNames}。`, agent.location_id);
       }
 
       if (leveled) {
-        logEvent(db, agent.id, 'levelup', `${agent.name} reached level ${newLevel}!`, agent.location_id);
+        logEvent(db, agent.id, 'levelup', `${agent.name} 升級到 Lv.${newLevel}！`, agent.location_id);
       }
 
       // Combat skill exp
       const skillResult = grantSkillExp(db, agent.id, 'combat', 1);
       if (skillResult?.leveled) {
-        logEvent(db, agent.id, 'skill', `${agent.name}'s combat skill reached level ${skillResult.newLevel}!`, agent.location_id);
+        logEvent(db, agent.id, 'skill', `${agent.name} 的戰鬥技能升到 ${skillResult.newLevel} 級！`, agent.location_id);
       }
 
       // Auto-equip if enabled
@@ -533,12 +819,12 @@ function doAttack(db: Database, agent: AgentWithStrategy, monster: MonsterRow): 
 
       db.prepare(`
         UPDATE agents
-        SET hp = ?, gold = gold - ?, location_id = 'starter_village',
+        SET hp = ?, gold = gold - ?, location_id = 'spawn_terminal',
             status = 'idle', updated_at = datetime('now')
         WHERE id = ?
       `).run(respawnHp, goldLost, agent.id);
 
-      logEvent(db, agent.id, 'death', `${agent.name} was slain by ${monster.name}. Lost ${goldLost} gold. Respawned at starter_village.`, agent.location_id);
+      logEvent(db, agent.id, 'death', `${agent.name} 被 ${monster.name} 擊殺，損失 ${goldLost} 金幣，在 The Terminal 重生。`, agent.location_id);
     }
   });
 
@@ -579,7 +865,7 @@ function autoEquip(db: Database, agent: AgentWithStrategy): void {
           db.prepare('UPDATE inventory SET equipped = 0 WHERE id = ?').run(equippedWeapon.id);
         }
         db.prepare('UPDATE inventory SET equipped = 1 WHERE id = ?').run(candidate.id);
-        logEvent(db, agent.id, 'loot', `${agent.name} auto-equipped ${candidate.name} (ATK +${candidate.attack_bonus}).`, agent.location_id);
+        logEvent(db, agent.id, 'loot', `${agent.name} 自動裝備了 ${candidate.name}（ATK +${candidate.attack_bonus}）。`, agent.location_id);
       }
     } else if (candidate.type === 'armor') {
       const currentBonus = equippedArmor?.defense_bonus ?? 0;
@@ -588,7 +874,7 @@ function autoEquip(db: Database, agent: AgentWithStrategy): void {
           db.prepare('UPDATE inventory SET equipped = 0 WHERE id = ?').run(equippedArmor.id);
         }
         db.prepare('UPDATE inventory SET equipped = 1 WHERE id = ?').run(candidate.id);
-        logEvent(db, agent.id, 'loot', `${agent.name} auto-equipped ${candidate.name} (DEF +${candidate.defense_bonus}).`, agent.location_id);
+        logEvent(db, agent.id, 'loot', `${agent.name} 自動裝備了 ${candidate.name}（DEF +${candidate.defense_bonus}）。`, agent.location_id);
       }
     }
   }
@@ -638,6 +924,7 @@ function acceptPvpChallenge(db: Database, agent: AgentWithStrategy, challenge: P
       attack: targetStats.effectiveAttack,
       defense: targetStats.effectiveDefense,
     },
+    { str: challenger.str, agi: challenger.agi, spd: challenger.spd },
   );
 
   const pvpTx = db.transaction(() => {
@@ -657,8 +944,8 @@ function acceptPvpChallenge(db: Database, agent: AgentWithStrategy, challenge: P
       WHERE id = ?
     `).run(challengerWon ? 'challenger_win' : 'target_win', challenge.id);
 
-    logEvent(db, winner.id, 'pvp', `${winner.name} defeated ${loser.name} in PVP and gained ${goldTransfer} gold.`, agent.location_id);
-    logEvent(db, loser.id, 'pvp', `${loser.name} was defeated by ${winner.name} in PVP and lost ${goldTransfer} gold.`, agent.location_id);
+    logEvent(db, winner.id, 'pvp', `${winner.name} 在 PVP 中擊敗了 ${loser.name}，獲得 ${goldTransfer} 金幣。`, agent.location_id);
+    logEvent(db, loser.id, 'pvp', `${loser.name} 在 PVP 中被 ${winner.name} 擊敗，損失 ${goldTransfer} 金幣。`, agent.location_id);
   });
 
   pvpTx();
@@ -669,8 +956,27 @@ function acceptPvpChallenge(db: Database, agent: AgentWithStrategy, challenge: P
 // ---------------------------------------------------------------------------
 
 function tickAgent(db: Database, agent: AgentWithStrategy): void {
+  // Check for Chaos debuff — 20% chance to waste this turn
+  const chaosDebuff = db.prepare(
+    "SELECT id FROM agent_buffs WHERE agent_id = ? AND buff_name = 'Chaos' AND expires_at > datetime('now')"
+  ).get(agent.id) as { id: string } | undefined;
+  if (chaosDebuff && Math.random() < 0.2) {
+    logEvent(db, agent.id, 'buff', `${agent.name} 被 Chaos 干擾，本回合浪費了！`, agent.location_id);
+    return;
+  }
+
   const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(agent.location_id) as LocationRow | undefined;
   if (!location) return;
+
+  // Check for active battle FIRST — one round per tick
+  const activeBattle = db.prepare(
+    "SELECT * FROM active_battles WHERE agent_id = ? AND status = 'in_progress'"
+  ).get(agent.id) as ActiveBattleRow | undefined;
+
+  if (activeBattle) {
+    tickBattle(db, agent, activeBattle);
+    return; // Battle takes priority — one round per tick
+  }
 
   const hpPercent = Math.floor((agent.hp / agent.max_hp) * 100);
 
@@ -733,7 +1039,7 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
     return;
   }
 
-  // Step 5: In wild — find monsters and fight
+  // Step 5: In wild — find monsters and start a battle
   const monsters = db.prepare(`
     SELECT am.id, am.template_id, am.location_id, am.current_hp,
            mt.name, mt.level, mt.attack, mt.defense, mt.hp as max_hp,
@@ -746,7 +1052,7 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
   if (monsters.length > 0) {
     const target = pickTarget(monsters, agent);
     if (target) {
-      doAttack(db, agent, target);
+      startBattle(db, agent, target);
       return;
     }
   }
@@ -761,6 +1067,8 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
   }
 
   // Idle — nothing to do this tick
+  db.prepare(`UPDATE agents SET current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(JSON.stringify({ type: 'idle' }), agent.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -768,8 +1076,30 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
 // ---------------------------------------------------------------------------
 
 export function runAutoTick(db: Database): void {
+  // Clean expired buffs
+  db.prepare("DELETE FROM agent_buffs WHERE expires_at < datetime('now')").run();
+
+  // Clean stale battles from previous server sessions (older than 5 minutes)
+  db.prepare("DELETE FROM active_battles WHERE status = 'in_progress' AND datetime(created_at, '+5 minutes') < datetime('now')").run();
+
+  // Auto-offline: agents with no heartbeat in 2 minutes go to sleep
+  const offlineAgents = db.prepare(`
+    SELECT id, name, location_id FROM agents
+    WHERE auto_play = 1
+      AND last_heartbeat IS NOT NULL
+      AND datetime(last_heartbeat, '+2 minutes') < datetime('now')
+  `).all() as { id: string; name: string; location_id: string }[];
+
+  for (const agent of offlineAgents) {
+    db.prepare('UPDATE agents SET auto_play = 0 WHERE id = ?').run(agent.id);
+    logEvent(db, agent.id, 'dev', `${agent.name} 長時間無心跳，Agent 進入休眠。`, agent.location_id);
+  }
+
   const agents = db.prepare(`
-    SELECT a.*, s.combat_style, s.hp_retreat_threshold, s.target_priority,
+    SELECT a.id, a.name, a.level, a.exp, a.exp_to_next, a.hp, a.max_hp, a.attack, a.defense,
+           a.gold, a.location_id, a.status, a.auto_play,
+           a.class, a.primary_language, a.str, a.int_stat, a.agi, a.vit, a.spd, a.cha,
+           s.combat_style, s.hp_retreat_threshold, s.target_priority,
            s.auto_equip, s.auto_potion, s.potion_threshold, s.preferred_zone,
            s.pvp_enabled, s.pvp_aggression, s.sell_materials, s.buy_potions_when_low,
            s.explore_new_zones, s.trade_enabled
@@ -786,3 +1116,6 @@ export function runAutoTick(db: Database): void {
     }
   }
 }
+
+// Export doAttack for use by action routes (instant combat for manual API calls)
+export { doAttack };

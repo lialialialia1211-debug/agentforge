@@ -8,11 +8,12 @@ const router = Router();
 // Valid location IDs for preferred_zone validation
 const VALID_LOCATION_IDS = new Set([
   'auto',
-  'starter_village',
-  'town_market',
-  'dark_forest',
-  'mine_entrance',
-  'abandoned_graveyard',
+  'spawn_terminal',
+  'npm_commons',
+  'pypi_shores',
+  'crates_peaks',
+  'maven_depths',
+  'package_bazaar',
 ]);
 
 // Field type map for safe dynamic UPDATE building

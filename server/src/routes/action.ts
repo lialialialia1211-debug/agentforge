@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { runCombat } from '../game/combat.js';
+import type { CombatStats } from '../game/combat.js';
 import { rollLoot } from '../game/loot.js';
 import { getCombatBonus, grantSkillExp } from '../game/skills.js';
 import type { Agent, ActiveMonster, MonsterTemplate, Location, InventoryEntry, Item, ApiResponse } from '../types.js';
@@ -11,7 +12,7 @@ const router = Router();
 // Helper: log a game event
 function logEvent(
   agentId: string,
-  eventType: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'skill',
+  eventType: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'skill' | 'dev' | 'buff',
   message: string,
   locationId: string | null,
 ): void {
@@ -108,12 +109,12 @@ router.post('/move', authMiddleware, (req: Request, res: Response) => {
 
     // Update agent location
     db.prepare(`UPDATE agents SET location_id = ?, updated_at = datetime('now') WHERE id = ?`).run(destination, agent.id);
-    logEvent(agent.id, 'move', `${agent.name} moved from ${currentLocation.name} to ${destLocation.name}.`, destination);
+    logEvent(agent.id, 'move', `${agent.name} 從 ${currentLocation.name} 移動到 ${destLocation.name}。`, destination);
 
     // Grant scout skill exp on successful move
     const scoutSkillResult = grantSkillExp(db, agent.id, 'scout', 1);
     if (scoutSkillResult?.leveled) {
-      logEvent(agent.id, 'skill', `${agent.name}'s scout skill reached level ${scoutSkillResult.newLevel}!`, destination);
+      logEvent(agent.id, 'skill', `${agent.name} 的偵察技能升到 ${scoutSkillResult.newLevel} 級！`, destination);
     }
 
     const response: ApiResponse = {
@@ -165,11 +166,24 @@ router.post('/attack', authMiddleware, (req: Request, res: Response) => {
       return;
     }
 
-    const { effectiveAttack: baseEffectiveAttack, effectiveDefense } = getEffectiveStats(agent);
+    const { effectiveAttack: baseEffectiveAttack, effectiveDefense: baseEffectiveDefense } = getEffectiveStats(agent);
     const combatBonus = getCombatBonus(db, agent.id);
-    const effectiveAttack = baseEffectiveAttack + combatBonus.attackBonus;
+    let effectiveAttack = baseEffectiveAttack + combatBonus.attackBonus;
+    let effectiveDefense = baseEffectiveDefense;
+
+    // Apply active buffs to combat stats
+    const activeBuffs = db.prepare(
+      "SELECT buff_name, effect FROM agent_buffs WHERE agent_id = ? AND expires_at > datetime('now')"
+    ).all(agent.id) as { buff_name: string; effect: string }[];
+
+    for (const buff of activeBuffs) {
+      const eff = JSON.parse(buff.effect);
+      if (eff.stat === 'attack') effectiveAttack = Math.floor(effectiveAttack * (1 + eff.modifier));
+      if (eff.stat === 'defense') effectiveDefense = Math.floor(effectiveDefense * (1 + eff.modifier));
+    }
 
     // Run combat
+    const agentStats: CombatStats = { str: agent.str, agi: agent.agi, spd: agent.spd };
     const combatResult = runCombat(
       effectiveAttack,
       effectiveDefense,
@@ -180,6 +194,7 @@ router.post('/attack', authMiddleware, (req: Request, res: Response) => {
         attack: activeMonster.attack,
         defense: activeMonster.defense,
       },
+      agentStats,
     );
 
     // Set agent to combat status during resolution, then back to idle
@@ -209,7 +224,7 @@ router.post('/attack', authMiddleware, (req: Request, res: Response) => {
         while (newExp >= expToNext) {
           newExp -= expToNext;
           newLevel++;
-          newMaxHp += 15;
+          newMaxHp += 10 + (agent.vit || 5);
           newAttack += 3;
           newDefense += 2;
           newHp = newMaxHp; // Full HP on level up
@@ -231,21 +246,21 @@ router.post('/attack', authMiddleware, (req: Request, res: Response) => {
           WHERE id = ?
         `).run(newHp, newMaxHp, newAttack, newDefense, goldGained, newExp, expToNext, newLevel, agent.id);
 
-        logEvent(agent.id, 'combat', `${agent.name} defeated ${activeMonster.name}. Gained ${expGained} EXP, ${goldGained} gold.`, agent.location_id);
+        logEvent(agent.id, 'combat', `${agent.name} 擊敗了 ${activeMonster.name}，獲得 ${expGained} EXP、${goldGained} 金幣。`, agent.location_id);
 
         if (drops.length > 0) {
           const dropNames = drops.map((d) => d.item_id).join(', ');
-          logEvent(agent.id, 'loot', `${agent.name} looted: ${dropNames}.`, agent.location_id);
+          logEvent(agent.id, 'loot', `${agent.name} 拾取了 ${dropNames}。`, agent.location_id);
         }
 
         if (leveled) {
-          logEvent(agent.id, 'levelup', `${agent.name} reached level ${newLevel}!`, agent.location_id);
+          logEvent(agent.id, 'levelup', `${agent.name} 升級到 Lv.${newLevel}！`, agent.location_id);
         }
 
         // Grant combat skill exp on victory
         const combatSkillResult = grantSkillExp(db, agent.id, 'combat', 1);
         if (combatSkillResult?.leveled) {
-          logEvent(agent.id, 'skill', `${agent.name}'s combat skill reached level ${combatSkillResult.newLevel}!`, agent.location_id);
+          logEvent(agent.id, 'skill', `${agent.name} 的戰鬥技能升到 ${combatSkillResult.newLevel} 級！`, agent.location_id);
         }
 
         return {
@@ -265,12 +280,12 @@ router.post('/attack', authMiddleware, (req: Request, res: Response) => {
 
         db.prepare(`
           UPDATE agents
-          SET hp = ?, gold = gold - ?, location_id = 'starter_village',
+          SET hp = ?, gold = gold - ?, location_id = 'spawn_terminal',
               status = 'idle', updated_at = datetime('now')
           WHERE id = ?
         `).run(respawnHp, goldLost, agent.id);
 
-        logEvent(agent.id, 'death', `${agent.name} was slain by ${activeMonster.name}. Lost ${goldLost} gold. Respawned at starter_village.`, agent.location_id);
+        logEvent(agent.id, 'death', `${agent.name} 被 ${activeMonster.name} 擊殺，損失 ${goldLost} 金幣，在 The Terminal 重生。`, agent.location_id);
 
         return {
           result: 'defeat',

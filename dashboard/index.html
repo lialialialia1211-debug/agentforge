@@ -1,563 +1,247 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentForge — World Dashboard</title>
+  <title>CodeMud — World Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:       #0a0e14;
-      --bg2:      #111820;
-      --border:   #1a1f2b;
-      --orange:   #f0883e;
-      --blue:     #58a6ff;
-      --red:      #f85149;
-      --green:    #3fb950;
-      --gold:     #e3b341;
-      --purple:   #d2a8ff;
-      --gray:     #3a3f4b;
-      --text:     #8b949e;
-      --font:     'SF Mono', Consolas, 'Courier New', monospace;
+      --bg: #0a0e14; --bg2: #111820; --border: #1a1f2b;
+      --orange: #f0883e; --blue: #58a6ff; --red: #f85149;
+      --green: #3fb950; --gold: #e3b341; --purple: #d2a8ff;
+      --cyan: #39d2c0; --gray: #484f58; --text: #8b949e;
+      --font: 'SF Mono', Consolas, 'Courier New', monospace;
     }
+    html, body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 12px; min-width: 1024px; min-height: 100vh; overflow-x: hidden; }
+    .app { display: flex; flex-direction: column; height: 100vh; }
 
-    html, body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 12px;
-      min-width: 1024px;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    /* ── Layout ── */
-    .app {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-
-    /* ── Header ── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-
-    .header-left { display: flex; align-items: baseline; gap: 8px; }
-
-    .brand {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--orange);
-      letter-spacing: 1px;
-    }
-
-    .brand-version {
-      font-size: 10px;
-      color: var(--gray);
-      letter-spacing: 1px;
-    }
-
-    .header-right { display: flex; align-items: center; gap: 16px; }
-
+    /* HEADER */
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0; z-index: 10; }
+    .header-left { display: flex; align-items: baseline; gap: 10px; }
+    .brand { font-size: 18px; font-weight: 700; color: var(--orange); letter-spacing: 3px; text-shadow: 0 0 18px rgba(240,136,62,0.5); }
+    .brand-sub { font-size: 10px; color: var(--cyan); letter-spacing: 1.5px; opacity: 0.85; }
+    .header-right { display: flex; align-items: center; gap: 18px; }
     .tick-counter { font-size: 11px; color: var(--text); }
     .tick-counter span { color: var(--orange); font-weight: 700; }
-
     .agent-count-header { font-size: 11px; color: var(--text); }
     .agent-count-header span { color: var(--blue); font-weight: 700; }
+    .btn-spectate { font-size: 10px; font-weight: 700; font-family: var(--font); letter-spacing: 1.5px; color: var(--cyan); background: rgba(57,210,192,0.1); border: 1px solid rgba(57,210,192,0.35); padding: 4px 10px; border-radius: 3px; cursor: pointer; transition: background 0.15s, box-shadow 0.15s; }
+    .btn-spectate:hover { background: rgba(57,210,192,0.18); box-shadow: 0 0 10px rgba(57,210,192,0.25); }
+    .live-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--green); letter-spacing: 1.5px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
 
-    .live-badge {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--green);
-      letter-spacing: 1px;
-    }
-
-    .live-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: liveDot 2s ease-in-out infinite;
-    }
-
-    @keyframes liveDot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    /* ── Stats Bar ── */
-    .stats-bar {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .stat-card {
-      padding: 10px 16px;
-      border-right: 1px solid var(--border);
-    }
+    /* STATS BAR */
+    .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); border-bottom: 1px solid var(--border); flex-shrink: 0; transition: max-height 0.3s, opacity 0.3s; }
+    .stat-card { padding: 10px 18px; border-right: 1px solid var(--border); }
     .stat-card:last-child { border-right: none; }
+    .stat-label { font-size: 9px; color: var(--text); text-transform: uppercase; letter-spacing: 1.8px; margin-bottom: 4px; }
+    .stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
+    .stat-sub { font-size: 10px; color: var(--text); margin-top: 3px; }
 
-    .stat-label {
-      font-size: 10px;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      margin-bottom: 4px;
-    }
+    /* LAYOUT */
+    .main-body { display: grid; grid-template-columns: 1fr 310px; flex: 1; min-height: 0; overflow: hidden; transition: grid-template-columns 0.3s; }
+    .left-col { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; min-height: 0; }
+    .map-wrapper { flex: 1; min-height: 0; position: relative; background: #070b10; overflow: hidden; }
+    .map-wrapper svg { width: 100%; height: 100%; display: block; }
 
-    .stat-value {
-      font-size: 24px;
-      font-weight: 700;
-      line-height: 1;
-    }
-
-    .stat-sub {
-      font-size: 10px;
-      color: var(--text);
-      margin-top: 2px;
-    }
-
-    /* ── Main Body ── */
-    .main-body {
-      display: grid;
-      grid-template-columns: 1fr 300px;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    /* ── Map Area ── */
-    .map-area {
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .map-container {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .map-container svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    .map-legend {
-      padding: 6px 14px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      font-size: 10px;
-      color: var(--text);
-      flex-shrink: 0;
-    }
-
-    .legend-item { display: flex; align-items: center; gap: 4px; }
-
-    .legend-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-    }
-
-    .legend-sq {
-      width: 8px; height: 8px;
-      border: 1px solid currentColor;
-    }
-
-    /* ── Side Panel ── */
-    .side-panel {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--bg);
-    }
-
-    .side-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .side-title {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-    }
-
-    .side-count {
-      font-size: 10px;
-      color: var(--text);
-    }
-
-    .side-count span { color: var(--blue); }
-
-    .back-link {
-      font-size: 10px;
-      color: var(--blue);
-      cursor: pointer;
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      transition: opacity 0.15s;
-    }
-    .back-link:hover { opacity: 0.7; }
-
-    .side-body {
-      flex: 1;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-    }
-
+    /* SIDE PANEL */
+    .side-panel { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); transition: width 0.3s; }
+    .side-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .side-title { font-size: 9px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 1.8px; }
+    .back-link { font-size: 10px; color: var(--blue); cursor: pointer; opacity: 0.8; transition: opacity 0.15s; }
+    .back-link:hover { opacity: 1; }
+    .side-body { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
     .side-body::-webkit-scrollbar { width: 3px; }
-    .side-body::-webkit-scrollbar-track { background: transparent; }
     .side-body::-webkit-scrollbar-thumb { background: var(--border); }
 
-    .side-divider {
-      height: 1px;
-      background: var(--border);
-      margin: 0;
-    }
+    /* AGENT CARDS */
+    .agent-card { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s; }
+    .agent-card:hover { background: rgba(88,166,255,0.04); }
+    .agent-card.combat { border-left: 2px solid var(--red); }
+    .agent-card.idle   { border-left: 2px solid var(--green); }
+    .agent-card-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px 2px; }
+    .agent-name { font-size: 13px; font-weight: 700; color: #c9d1d9; }
+    .agent-lv { font-size: 10px; color: var(--text); }
+    .agent-meta { font-size: 10px; color: var(--text); padding: 0 12px 2px; }
+    .status-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .status-combat { background: rgba(248,81,73,0.15); color: var(--red); }
+    .status-idle    { background: rgba(63,185,80,0.12);  color: var(--green); }
+    .hp-bar-wrap { margin: 4px 12px 3px; }
+    .hp-bar-bg { background: var(--border); border-radius: 2px; height: 4px; overflow: hidden; }
+    .hp-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+    .hp-bar-label { display: flex; justify-content: space-between; font-size: 9px; color: var(--text); margin-top: 2px; }
 
-    /* ── Agent Card ── */
-    .agent-card {
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: background 0.1s;
-    }
-
-    .agent-card:hover { background: rgba(88,166,255,0.03); }
-
-    .agent-card.combat { border-left: 2px solid var(--orange); }
-
-    .agent-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 7px 12px 2px;
-    }
-
-    .agent-name-lv { display: flex; align-items: baseline; gap: 0; flex: 1; }
-
-    .agent-name {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--blue);
-    }
-
-    .agent-lv {
-      font-size: 10px;
-      color: var(--text);
-      margin-left: auto;
-    }
-
-    .agent-card-sub {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px 3px;
-    }
-
-    .agent-location { font-size: 10px; color: var(--text); }
-
-    .status-badge {
-      font-size: 9px;
-      font-weight: 700;
-      padding: 1px 5px;
-      border-radius: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .status-idle     { background: rgba(63,185,80,0.12);  color: var(--green); }
-    .status-combat   { background: rgba(248,81,73,0.15);  color: var(--red); }
-    .status-dead     { background: rgba(218,54,51,0.12);  color: #da3633; }
-    .status-traveling{ background: rgba(88,166,255,0.12); color: var(--blue); }
-
-    .agent-hp-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 2px 12px 6px;
-    }
-
-    .hp-bar-bg {
-      flex: 1;
-      height: 5px;
-      background: var(--border);
-      overflow: hidden;
-    }
-
-    .hp-bar-fill {
-      height: 100%;
-      transition: width 0.4s ease;
-    }
-
-    .hp-high   { background: var(--green); }
-    .hp-mid    { background: var(--gold); }
-    .hp-low    { background: var(--red); }
-
-    .hp-pct   { font-size: 10px; color: var(--text); min-width: 28px; text-align: right; }
-    .hp-nums  { font-size: 10px; color: var(--gray); }
-
-    /* Agent expanded */
-    .agent-expand {
-      border-top: 1px solid var(--border);
-      padding: 6px 12px 8px;
-      display: none;
-    }
-
-    .agent-expand.open { display: block; }
-
-    .expand-section-label {
-      font-size: 9px;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 4px;
-    }
-
-    .equip-row { display: flex; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
-
-    .equip-item { font-size: 10px; }
-
-    .stats-row-mini { display: flex; gap: 10px; font-size: 10px; margin-top: 4px; }
-    .stat-mini { color: var(--text); }
-    .stat-mini span { color: var(--orange); }
-
-    /* Rarity colors */
-    .rarity-white  { color: var(--text); }
+    /* AGENT EXPANDED */
+    .agent-expand { padding: 6px 12px 10px; background: rgba(255,255,255,0.015); border-top: 1px solid var(--border); }
+    .expand-section { margin-bottom: 8px; }
+    .expand-title { font-size: 9px; color: var(--text); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+    .equip-row { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 3px; }
+    .equip-slot { font-size: 9px; color: var(--gray); width: 38px; flex-shrink: 0; }
+    .rarity-white  { color: #c9d1d9; }
     .rarity-green  { color: var(--green); }
     .rarity-blue   { color: var(--blue); }
-    .rarity-purple { color: var(--purple); }
+    .rarity-purple { color: var(--purple); text-shadow: 0 0 8px rgba(210,168,255,0.4); }
+    .stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 3px; }
+    .stat-cell { background: var(--border); border-radius: 2px; padding: 3px 6px; text-align: center; }
+    .stat-key { font-size: 8px; color: var(--text); text-transform: uppercase; display: block; }
+    .stat-val { font-size: 13px; font-weight: 700; color: #c9d1d9; }
+    .buff-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .buff-tag { font-size: 9px; padding: 2px 6px; background: rgba(227,179,65,0.12); color: var(--gold); border-radius: 2px; border: 1px solid rgba(227,179,65,0.2); }
+    .gold-row { display: flex; gap: 12px; font-size: 10px; margin-top: 4px; }
+    .gold-val { color: var(--gold); font-weight: 700; }
+    .atk-val  { color: var(--red); font-weight: 700; }
+    .def-val  { color: var(--blue); font-weight: 700; }
+    .btn-watch { width: 100%; margin-top: 8px; padding: 6px; font-family: var(--font); font-size: 10px; font-weight: 700; color: var(--orange); background: rgba(240,136,62,0.1); border: 1px solid rgba(240,136,62,0.3); border-radius: 3px; cursor: pointer; letter-spacing: 1px; transition: background 0.15s; }
+    .btn-watch:hover { background: rgba(240,136,62,0.2); }
 
-    /* ── Location Detail ── */
-    .loc-detail { padding: 10px 12px 0; }
+    /* LOCATION PANEL */
+    .loc-panel { padding: 10px 12px; }
+    .loc-panel-name { font-size: 15px; font-weight: 700; color: #c9d1d9; margin-bottom: 2px; }
+    .loc-panel-meta { font-size: 10px; color: var(--text); margin-bottom: 6px; }
+    .loc-panel-desc { font-size: 10px; color: var(--text); line-height: 1.6; margin-bottom: 10px; border-left: 2px solid var(--border); padding-left: 8px; }
+    .loc-section-title { font-size: 9px; color: var(--text); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; padding-bottom: 2px; border-bottom: 1px solid var(--border); }
+    .monster-row { display: flex; flex-direction: column; margin-bottom: 6px; }
+    .monster-name-row { display: flex; justify-content: space-between; font-size: 10px; color: #c9d1d9; margin-bottom: 2px; }
+    .monster-lv { color: var(--text); }
+    .exit-btn { display: inline-block; margin: 3px 4px 0 0; font-size: 10px; color: var(--blue); cursor: pointer; padding: 2px 7px; border: 1px solid rgba(88,166,255,0.25); border-radius: 2px; background: rgba(88,166,255,0.06); }
+    .exit-btn:hover { background: rgba(88,166,255,0.12); }
 
-    .loc-detail-name {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--orange);
-      text-transform: uppercase;
-      margin-bottom: 2px;
-    }
+    /* BATTLE PANEL */
+    .battle-panel { display: flex; flex-direction: column; height: 100%; padding: 0; }
+    .battle-combatant { padding: 10px 14px; }
+    .combatant-name { font-size: 14px; font-weight: 700; color: #c9d1d9; }
+    .combatant-meta { font-size: 10px; color: var(--text); margin-bottom: 5px; }
+    .combatant-hp-bar { height: 8px; border-radius: 3px; background: var(--border); overflow: hidden; margin-bottom: 3px; }
+    .combatant-hp-fill { height: 100%; border-radius: 3px; transition: width 0.7s ease; }
+    .combatant-hp-nums { font-size: 10px; color: var(--text); }
+    .battle-vs { text-align: center; padding: 6px; font-size: 13px; font-weight: 700; color: var(--orange); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); letter-spacing: 3px; }
+    .agent-combat-stats { display: flex; gap: 10px; margin-top: 5px; font-size: 10px; }
+    .battle-log { flex: 1; overflow-y: auto; padding: 6px 10px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; min-height: 0; }
+    .battle-log::-webkit-scrollbar { width: 3px; }
+    .battle-log::-webkit-scrollbar-thumb { background: var(--border); }
+    .log-row { font-size: 10px; padding: 2px 0; border-bottom: 1px solid rgba(26,31,43,0.5); line-height: 1.5; }
+    .log-dmg-agent   { font-weight: 700; }
+    .log-dmg-monster { font-weight: 700; }
+    .battle-result { text-align: center; padding: 14px; font-size: 20px; font-weight: 700; letter-spacing: 3px; }
+    .result-victory  { color: var(--gold); text-shadow: 0 0 20px rgba(227,179,65,0.7); }
+    .result-defeated { color: var(--red); text-shadow: 0 0 20px rgba(248,81,73,0.7); }
+    .battle-shake { animation: shake 0.3s ease; }
 
-    .loc-detail-type { font-size: 10px; color: var(--text); margin-bottom: 4px; }
-
-    .loc-detail-desc {
-      font-size: 10px;
-      color: var(--gray);
-      margin-bottom: 8px;
-      line-height: 1.5;
-    }
-
-    .detail-section-label {
-      font-size: 9px;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      padding: 6px 12px 4px;
-      border-top: 1px solid var(--border);
-      margin-top: 2px;
-    }
-
-    /* Monster list */
-    .monster-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 12px;
-      font-size: 10px;
-    }
-
-    .monster-prefix { color: var(--gray); width: 10px; flex-shrink: 0; }
-    .monster-name   { color: var(--red); width: 70px; flex-shrink: 0; }
-    .monster-lv     { color: var(--text); width: 32px; flex-shrink: 0; }
-
-    .monster-hp-bg {
-      flex: 1;
-      height: 4px;
-      background: var(--border);
-      overflow: hidden;
-    }
-
-    .monster-hp-fill {
-      height: 100%;
-      background: var(--green);
-    }
-
-    .monster-hp-fill.damaged { background: var(--gold); }
-
-    .monster-hp-txt { font-size: 9px; color: var(--gray); min-width: 40px; text-align: right; }
-
-    /* Exits */
-    .exit-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 12px;
-      font-size: 10px;
-      cursor: pointer;
-      color: var(--blue);
-      transition: opacity 0.15s;
-    }
-
-    .exit-item:hover { opacity: 0.7; }
-
-    .exit-arrow { color: var(--gray); }
-    .exit-type  { font-size: 9px; color: var(--gray); }
-
-    /* Empty state */
-    .empty-msg {
-      padding: 12px;
-      font-size: 10px;
-      color: var(--gray);
-      text-align: center;
-    }
-
-    /* ── Event Feed ── */
-    .event-feed {
-      height: 160px;
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .feed-header {
-      display: flex;
-      align-items: center;
-      padding: 5px 14px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .feed-title {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-    }
-
-    .feed-list {
-      flex: 1;
-      overflow-y: auto;
-      scrollbar-width: none;
-    }
-
+    /* EVENT FEED */
+    .event-feed { height: 160px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s; }
+    .feed-header { padding: 5px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+    .feed-title { font-size: 9px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 1.8px; }
+    .feed-list { flex: 1; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; }
     .feed-list::-webkit-scrollbar { display: none; }
-
-    .feed-row {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      padding: 3px 14px;
-      border-bottom: 1px solid rgba(26,31,43,0.5);
-      font-size: 11px;
-    }
-
-    .feed-row.new-event {
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-3px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .feed-time { font-size: 10px; color: var(--gray); flex-shrink: 0; }
-
-    .feed-badge {
-      font-size: 9px;
-      font-weight: 700;
-      padding: 1px 5px;
-      border-radius: 2px;
-      flex-shrink: 0;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
+    .feed-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 14px; border-bottom: 1px solid rgba(26,31,43,0.4); font-size: 11px; flex-shrink: 0; }
+    .feed-time { font-size: 10px; color: var(--gray); flex-shrink: 0; white-space: nowrap; }
+    .feed-badge { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .feed-msg { color: var(--text); flex: 1; }
     .badge-combat  { background: rgba(248,81,73,0.15);  color: var(--red); }
     .badge-loot    { background: rgba(227,179,65,0.15);  color: var(--gold); }
     .badge-move    { background: rgba(88,166,255,0.15);  color: var(--blue); }
     .badge-death   { background: rgba(218,54,51,0.15);   color: #f85149; }
     .badge-levelup { background: rgba(210,168,255,0.15); color: var(--purple); }
-    .badge-trade   { background: rgba(63,185,80,0.15);   color: var(--green); }
-    .badge-default { background: rgba(59,63,75,0.3);     color: var(--text); }
+    .badge-dev     { background: rgba(57,210,192,0.15);  color: var(--cyan); }
+    .badge-buff    { background: rgba(227,179,65,0.15);  color: var(--gold); }
+    .badge-shop    { background: rgba(63,185,80,0.15);   color: var(--green); }
+    .badge-skill   { background: rgba(240,136,62,0.15);  color: var(--orange); }
+    .badge-pvp     { background: rgba(248,81,73,0.2);    color: var(--red); }
+    .badge-default { background: rgba(72,79,88,0.3);     color: var(--text); }
+    .feed-row.flash-levelup { background: rgba(227,179,65,0.06); }
+    .feed-row.flash-death   { background: rgba(248,81,73,0.06); }
+    .feed-row.rare-loot { border: 1px solid rgba(88,166,255,0.35); box-shadow: 0 0 8px rgba(88,166,255,0.12); }
 
-    .feed-msg { color: var(--text); flex: 1; }
+    /* SPECTATE MODE */
+    .app.spectate .stats-bar { max-height: 0; overflow: hidden; opacity: 0; border: none; }
+    .app.spectate .main-body { grid-template-columns: 1fr 0px; }
+    .app.spectate .side-panel { display: none; }
+    .app.spectate .left-col { border-right: none; }
+    .app.spectate .event-feed { position: fixed; bottom: 0; left: 0; right: 0; height: 120px; background: rgba(7,11,16,0.88); z-index: 100; border-top: 1px solid var(--border); }
+    .spectate-label { display: none; position: fixed; top: 14px; right: 18px; font-size: 10px; font-weight: 700; color: var(--cyan); letter-spacing: 2px; background: rgba(57,210,192,0.08); border: 1px solid rgba(57,210,192,0.3); padding: 4px 10px; border-radius: 3px; z-index: 200; }
+    .app.spectate .spectate-label { display: block; }
 
-    /* ── SVG Map Styles ── */
-    .loc-node {
-      cursor: pointer;
-      transition: stroke-width 0.15s, fill 0.15s;
-    }
+    /* HP COLORS */
+    .hp-high   { background: var(--green); }
+    .hp-mid    { background: var(--gold); }
+    .hp-low    { background: var(--red); }
 
-    .loc-node:hover { stroke-width: 2.5 !important; }
-    .loc-node.selected { stroke-width: 2.5 !important; fill: #151a24 !important; }
+    /* ANIMATIONS */
+    @media (prefers-reduced-motion: no-preference) {
+      .live-dot { animation: pulseDot 1.5s ease-in-out infinite; }
+      @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.75)} }
 
-    .pulse-ring {
-      animation: pulse 2s ease-in-out infinite;
-    }
+      @keyframes shake {
+        0%,100%{transform:translateX(0)}
+        20%{transform:translateX(-4px)}
+        40%{transform:translateX(4px)}
+        60%{transform:translateX(-4px)}
+        80%{transform:translateX(4px)}
+      }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 0.3; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(1.15); }
-    }
+      @keyframes slideIn {
+        from{transform:translateY(10px);opacity:0}
+        to{transform:translateY(0);opacity:1}
+      }
+      .feed-row.new-event { animation: slideIn 0.3s ease; }
 
-    /* ── Animations ── */
-    @keyframes pulse-css {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+      @keyframes hpFlashAnim { 0%,100%{opacity:1} 50%{opacity:0.4} }
+      .hp-crit { animation: hpFlashAnim 0.5s ease infinite; }
+
+      @keyframes dashFlow { to { stroke-dashoffset: -20; } }
+
+      @keyframes pulseRing {
+        0%   { r: 12; opacity: 0.6; }
+        100% { r: 22; opacity: 0; }
+      }
+
+      @keyframes combatAura {
+        0%,100% { r: 12; opacity: 0.5; stroke: var(--orange); }
+        50%     { r: 18; opacity: 0.15; stroke: var(--orange); }
+      }
+
+      @keyframes burstCircle {
+        0%   { r: 5; opacity: 0.9; }
+        100% { r: 38; opacity: 0; }
+      }
+
+      @keyframes floatUp {
+        0%   { transform: translateY(0); opacity: 1; }
+        100% { transform: translateY(-32px); opacity: 0; }
+      }
+
+      @keyframes trailFade {
+        0%   { opacity: 0.6; }
+        100% { opacity: 0; }
+      }
+
+      @keyframes flashBorder {
+        0%,100% { opacity: 1; }
+        50%      { opacity: 0; }
+      }
     }
   </style>
 </head>
 <body>
-<div class="app">
-
+<div class="app" id="app">
   <!-- Header -->
-  <header class="header">
+  <div class="header">
     <div class="header-left">
-      <span class="brand">AgentForge</span>
-      <span class="brand-version">v0.2</span>
+      <span class="brand">CODEMUD</span>
+      <span class="brand-sub">Write code. Get stronger.</span>
     </div>
     <div class="header-right">
       <span class="tick-counter">TICK <span id="tickNum">0</span></span>
-      <span class="agent-count-header"><span id="headerAgentCount">0</span> agents</span>
-      <div class="live-badge">
-        <div class="live-dot" id="liveDot"></div>
-        LIVE
-      </div>
+      <span class="agent-count-header">AGENTS <span id="headerAgentCount">0</span></span>
+      <button class="btn-spectate" id="btnSpectate">SPECTATE</button>
+      <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
-  </header>
+  </div>
+  <div class="spectate-label">SPECTATE MODE</div>
 
   <!-- Stats Bar -->
-  <div class="stats-bar">
+  <div class="stats-bar" id="statsBar">
     <div class="stat-card">
       <div class="stat-label">Agents Online</div>
       <div class="stat-value" id="statAgents" style="color:var(--blue)">—</div>
@@ -566,728 +250,1238 @@
     <div class="stat-card">
       <div class="stat-label">Active Monsters</div>
       <div class="stat-value" id="statMonsters" style="color:var(--red)">—</div>
+      <div class="stat-sub" id="statMonstersSub"></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Kills</div>
-      <div class="stat-value" id="statKills" style="color:var(--orange)">—</div>
+      <div class="stat-value" id="statKills" style="color:var(--gold)">—</div>
+      <div class="stat-sub" id="statKillsSub"></div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Highest Level</div>
-      <div class="stat-value" id="statHighLv" style="color:var(--purple)">—</div>
-      <div class="stat-sub" id="statHighName"></div>
+      <div class="stat-value" id="statHighLevel" style="color:var(--purple)">—</div>
+      <div class="stat-sub" id="statHighLevelSub"></div>
     </div>
   </div>
 
   <!-- Main Body -->
-  <div class="main-body" style="flex:1; min-height:0; display:grid;">
-
-    <!-- Left: Map + Event Feed -->
-    <div style="display:flex; flex-direction:column; border-right:1px solid var(--border); overflow:hidden; min-height:0;">
-
-      <!-- Map -->
-      <div class="map-container" style="flex:1; min-height:0;">
-        <svg id="worldMap" viewBox="0 0 560 320" preserveAspectRatio="xMidYMid meet">
-
-          <!-- ── Continent outline ── -->
-          <path d="M 60 30 L 90 15 L 160 20 L 230 10 L 310 18 L 390 8 L 460 25 L 510 50 L 530 95 L 520 155 L 510 210 L 500 265 L 470 295 L 420 308 L 350 312 L 280 305 L 200 308 L 140 295 L 90 270 L 55 235 L 40 185 L 38 130 L 45 75 Z"
-                fill="#111820" stroke="#1a1f2b" stroke-width="0.5"/>
-
-          <!-- ── Rivers ── -->
-          <path d="M 180 60 Q 210 100 230 140 Q 250 175 270 200 Q 290 220 310 240"
-                fill="none" stroke="#0d1520" stroke-width="2"/>
-
-          <!-- ── Mountain decoration (NE, near mine_entrance) ── -->
-          <g stroke="#1a2030" stroke-width="1" fill="none">
-            <polyline points="355,90 365,75 375,90"/>
-            <polyline points="370,90 382,72 394,90"/>
-            <polyline points="388,88 398,73 408,88"/>
-            <polyline points="358,105 370,90 382,105"/>
-            <polyline points="375,103 388,88 401,103"/>
-          </g>
-
-          <!-- ── Forest decoration (W area, near dark_forest) ── -->
-          <g stroke="#151a24" stroke-width="1" fill="none">
-            <line x1="68" y1="165" x2="68" y2="150"/>
-            <line x1="74" y1="163" x2="74" y2="148"/>
-            <line x1="80" y1="166" x2="80" y2="151"/>
-            <line x1="86" y1="164" x2="86" y2="149"/>
-            <line x1="72" y1="178" x2="72" y2="163"/>
-            <line x1="78" y1="175" x2="78" y2="160"/>
-            <line x1="84" y1="177" x2="84" y2="162"/>
-          </g>
-
-          <!-- ── Tombstone decoration (SE, near graveyard) ── -->
-          <g stroke="#1a2030" stroke-width="1" fill="none">
-            <rect x="398" y="258" width="7" height="9" rx="3"/>
-            <line x1="401.5" y1="267" x2="401.5" y2="272"/>
-            <rect x="412" y="262" width="6" height="8" rx="2.5"/>
-            <line x1="415" y1="270" x2="415" y2="275"/>
-            <rect x="425" y="256" width="8" height="10" rx="3.5"/>
-            <line x1="429" y1="266" x2="429" y2="271"/>
-          </g>
-
-          <!-- ── Connection lines ── -->
-          <!-- starter_village(200,70) ↔ dark_forest(100,165) -->
-          <line x1="200" y1="70" x2="100" y2="165"
-                stroke="#1a1f2b" stroke-dasharray="4 3" stroke-width="1"/>
-          <!-- starter_village(200,70) ↔ town_market(130,260) -->
-          <line x1="200" y1="70" x2="130" y2="260"
-                stroke="#1a1f2b" stroke-dasharray="4 3" stroke-width="1"/>
-          <!-- dark_forest(100,165) ↔ mine_entrance(380,130) -->
-          <line x1="100" y1="165" x2="380" y2="130"
-                stroke="#1a1f2b" stroke-dasharray="4 3" stroke-width="1"/>
-          <!-- town_market(130,260) ↔ abandoned_graveyard(420,250) -->
-          <line x1="130" y1="260" x2="420" y2="250"
-                stroke="#1a1f2b" stroke-dasharray="4 3" stroke-width="1"/>
-
-          <!-- ── Location nodes ── -->
-
-          <!-- starter_village (200, 70) — town → blue -->
-          <g id="node-starter_village" data-loc="starter_village">
-            <circle class="pulse-ring" cx="200" cy="70" r="22" fill="none" stroke="#1f6feb" stroke-width="0.5" opacity="0" id="pulse-starter_village"/>
-            <circle class="loc-node" id="circle-starter_village" cx="200" cy="70" r="16"
-                    fill="#0a0e14" stroke="#1f6feb" stroke-width="1.5" style="cursor:pointer"/>
-            <text x="200" y="46" fill="#58a6ff" font-size="10" text-anchor="middle" font-weight="600"
-                  style="pointer-events:none; font-family:'SF Mono',Consolas,'Courier New',monospace;">新手村</text>
-            <g id="indi-starter_village" style="pointer-events:none">
-              <circle cx="186" cy="80" r="2.5" fill="#3fb950" id="agdot-starter_village" opacity="0"/>
-              <text x="191" y="83" fill="#3fb950" font-size="8" id="agcount-starter_village" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-              <circle cx="210" cy="80" r="2.5" fill="#f85149" id="mondot-starter_village" opacity="0"/>
-              <text x="215" y="83" fill="#f85149" font-size="8" id="moncount-starter_village" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-            </g>
-            <!-- combat swords icon, hidden by default -->
-            <g id="combat-starter_village" opacity="0" style="pointer-events:none">
-              <line x1="195" y1="63" x2="205" y2="75" stroke="#f0883e" stroke-width="1.5"/>
-              <line x1="205" y1="63" x2="195" y2="75" stroke="#f0883e" stroke-width="1.5"/>
-            </g>
-          </g>
-
-          <!-- dark_forest (100, 165) — wild level_max < 5 → orange -->
-          <g id="node-dark_forest" data-loc="dark_forest">
-            <circle class="pulse-ring" cx="100" cy="165" r="22" fill="none" stroke="#f0883e" stroke-width="0.5" opacity="0" id="pulse-dark_forest"/>
-            <circle class="loc-node" id="circle-dark_forest" cx="100" cy="165" r="16"
-                    fill="#0a0e14" stroke="#f0883e" stroke-width="1.5" style="cursor:pointer"/>
-            <text x="100" y="141" fill="#f0883e" font-size="10" text-anchor="middle" font-weight="600"
-                  style="pointer-events:none; font-family:'SF Mono',Consolas,'Courier New',monospace;">幽暗森林</text>
-            <g id="indi-dark_forest" style="pointer-events:none">
-              <circle cx="86" cy="175" r="2.5" fill="#3fb950" id="agdot-dark_forest" opacity="0"/>
-              <text x="91" y="178" fill="#3fb950" font-size="8" id="agcount-dark_forest" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-              <circle cx="110" cy="175" r="2.5" fill="#f85149" id="mondot-dark_forest" opacity="0"/>
-              <text x="115" y="178" fill="#f85149" font-size="8" id="moncount-dark_forest" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-            </g>
-            <g id="combat-dark_forest" opacity="0" style="pointer-events:none">
-              <line x1="95" y1="158" x2="105" y2="170" stroke="#f0883e" stroke-width="1.5"/>
-              <line x1="105" y1="158" x2="95" y2="170" stroke="#f0883e" stroke-width="1.5"/>
-            </g>
-          </g>
-
-          <!-- town_market (130, 260) — town → blue -->
-          <g id="node-town_market" data-loc="town_market">
-            <circle class="pulse-ring" cx="130" cy="260" r="22" fill="none" stroke="#1f6feb" stroke-width="0.5" opacity="0" id="pulse-town_market"/>
-            <circle class="loc-node" id="circle-town_market" cx="130" cy="260" r="16"
-                    fill="#0a0e14" stroke="#1f6feb" stroke-width="1.5" style="cursor:pointer"/>
-            <text x="130" y="236" fill="#58a6ff" font-size="10" text-anchor="middle" font-weight="600"
-                  style="pointer-events:none; font-family:'SF Mono',Consolas,'Courier New',monospace;">城鎮市集</text>
-            <g id="indi-town_market" style="pointer-events:none">
-              <circle cx="116" cy="270" r="2.5" fill="#3fb950" id="agdot-town_market" opacity="0"/>
-              <text x="121" y="273" fill="#3fb950" font-size="8" id="agcount-town_market" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-              <circle cx="140" cy="270" r="2.5" fill="#f85149" id="mondot-town_market" opacity="0"/>
-              <text x="145" y="273" fill="#f85149" font-size="8" id="moncount-town_market" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-            </g>
-            <g id="combat-town_market" opacity="0" style="pointer-events:none">
-              <line x1="125" y1="253" x2="135" y2="265" stroke="#f0883e" stroke-width="1.5"/>
-              <line x1="135" y1="253" x2="125" y2="265" stroke="#f0883e" stroke-width="1.5"/>
-            </g>
-          </g>
-
-          <!-- mine_entrance (380, 130) — wild level_max ~5-7 → orange -->
-          <g id="node-mine_entrance" data-loc="mine_entrance">
-            <circle class="pulse-ring" cx="380" cy="130" r="22" fill="none" stroke="#f0883e" stroke-width="0.5" opacity="0" id="pulse-mine_entrance"/>
-            <circle class="loc-node" id="circle-mine_entrance" cx="380" cy="130" r="16"
-                    fill="#0a0e14" stroke="#f0883e" stroke-width="1.5" style="cursor:pointer"/>
-            <text x="380" y="106" fill="#f0883e" font-size="10" text-anchor="middle" font-weight="600"
-                  style="pointer-events:none; font-family:'SF Mono',Consolas,'Courier New',monospace;">礦坑入口</text>
-            <g id="indi-mine_entrance" style="pointer-events:none">
-              <circle cx="366" cy="140" r="2.5" fill="#3fb950" id="agdot-mine_entrance" opacity="0"/>
-              <text x="371" y="143" fill="#3fb950" font-size="8" id="agcount-mine_entrance" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-              <circle cx="390" cy="140" r="2.5" fill="#f85149" id="mondot-mine_entrance" opacity="0"/>
-              <text x="395" y="143" fill="#f85149" font-size="8" id="moncount-mine_entrance" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-            </g>
-            <g id="combat-mine_entrance" opacity="0" style="pointer-events:none">
-              <line x1="375" y1="123" x2="385" y2="135" stroke="#f0883e" stroke-width="1.5"/>
-              <line x1="385" y1="123" x2="375" y2="135" stroke="#f0883e" stroke-width="1.5"/>
-            </g>
-          </g>
-
-          <!-- abandoned_graveyard (420, 250) — wild level_min >= 5 → red/danger -->
-          <g id="node-abandoned_graveyard" data-loc="abandoned_graveyard">
-            <circle class="pulse-ring" cx="420" cy="250" r="22" fill="none" stroke="#da3633" stroke-width="0.5" opacity="0" id="pulse-abandoned_graveyard"/>
-            <circle class="loc-node" id="circle-abandoned_graveyard" cx="420" cy="250" r="16"
-                    fill="#0a0e14" stroke="#da3633" stroke-width="1.5" style="cursor:pointer"/>
-            <text x="420" y="226" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600"
-                  style="pointer-events:none; font-family:'SF Mono',Consolas,'Courier New',monospace;">荒廢墓地</text>
-            <g id="indi-abandoned_graveyard" style="pointer-events:none">
-              <circle cx="406" cy="260" r="2.5" fill="#3fb950" id="agdot-abandoned_graveyard" opacity="0"/>
-              <text x="411" y="263" fill="#3fb950" font-size="8" id="agcount-abandoned_graveyard" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-              <circle cx="430" cy="260" r="2.5" fill="#f85149" id="mondot-abandoned_graveyard" opacity="0"/>
-              <text x="435" y="263" fill="#f85149" font-size="8" id="moncount-abandoned_graveyard" font-family="'SF Mono',Consolas,'Courier New',monospace"></text>
-            </g>
-            <g id="combat-abandoned_graveyard" opacity="0" style="pointer-events:none">
-              <line x1="415" y1="243" x2="425" y2="255" stroke="#f0883e" stroke-width="1.5"/>
-              <line x1="425" y1="243" x2="415" y2="255" stroke="#f0883e" stroke-width="1.5"/>
-            </g>
-          </g>
-
-        </svg>
+  <div class="main-body" id="mainBody">
+    <!-- Left Column -->
+    <div class="left-col" id="leftCol">
+      <div class="map-wrapper" id="mapWrapper">
+        <svg id="worldMap" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
-
-      <!-- Map Legend -->
-      <div class="map-legend">
-        <div class="legend-item">
-          <div class="legend-dot" style="background:var(--green)"></div>
-          <span>agents</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-dot" style="background:var(--red)"></div>
-          <span>monsters</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-sq" style="color:var(--blue)"></div>
-          <span>town</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-sq" style="color:var(--orange)"></div>
-          <span>wild</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-sq" style="color:#da3633"></div>
-          <span>danger</span>
-        </div>
-      </div>
-
       <!-- Event Feed -->
       <div class="event-feed">
         <div class="feed-header">
-          <span class="feed-title">Event Feed</span>
+          <span class="feed-title">Event Log</span>
         </div>
         <div class="feed-list" id="feedList"></div>
       </div>
-
     </div>
 
-    <!-- Right: Side Panel -->
+    <!-- Side Panel -->
     <div class="side-panel" id="sidePanel">
-
-      <!-- Agent list header (default) -->
-      <div class="side-header" id="agentListHeader">
-        <span class="side-title">Agents</span>
-        <span class="side-count"><span id="sideAgentCount">0</span> online</span>
+      <div class="side-header">
+        <span class="side-title" id="sideTitle">Agents</span>
+        <span class="back-link" id="backLink" style="display:none">← Back</span>
       </div>
-
-      <!-- Location detail header (hidden by default) -->
-      <div class="side-header" id="locDetailHeader" style="display:none;">
-        <span class="back-link" id="backLink">&#8592; BACK</span>
-      </div>
-
-      <div class="side-divider"></div>
       <div class="side-body" id="sideBody"></div>
     </div>
-
   </div>
 </div>
 
 <script>
-  /* ── State ── */
-  var state = {
-    selectedLocation: null,
-    tick: 0,
-    data: null,
-    expandedAgents: new Set(),
-    knownEventIds: new Set()
-  };
-
-  var API_URL = '/api/dashboard';
-  var POLL_MS = 3000;
-
-  /* ── Location metadata ── */
-  var LOC_META = {
-    starter_village:    { name: '新手村',  type: 'town',  desc: '冒險者的起點，充滿新手的喧囂。', level_min: 1, level_max: 3 },
-    dark_forest:        { name: '幽暗森林', type: 'wild',  desc: '陰暗的森林，樹木遮天蔽日，危機四伏。', level_min: 1, level_max: 4 },
-    town_market:        { name: '城鎮市集', type: 'town',  desc: '熱鬧的市集，各種道具與裝備在此交易。', level_min: 1, level_max: 3 },
-    mine_entrance:      { name: '礦坑入口', type: 'wild',  desc: '通往深邃礦坑的入口，礦石資源豐富但危險。', level_min: 3, level_max: 6 },
-    abandoned_graveyard:{ name: '荒廢墓地', type: 'wild',  desc: '不死生物出沒之地，只有強者才能生還。', level_min: 5, level_max: 9 }
-  };
-
-  var LOC_CONNECTIONS = {
-    starter_village:     ['dark_forest', 'town_market'],
-    dark_forest:         ['starter_village', 'mine_entrance'],
-    town_market:         ['starter_village', 'abandoned_graveyard'],
-    mine_entrance:       ['dark_forest'],
-    abandoned_graveyard: ['town_market']
-  };
-
-  /* ── DOM Helpers ── */
-  function el(tag, cls) {
-    var node = document.createElement(tag);
-    if (cls) node.className = cls;
-    return node;
-  }
-
-  function txt(tag, cls, text) {
-    var node = el(tag, cls);
-    node.textContent = text;
-    return node;
-  }
-
-  /* ── Stats ── */
-  function updateStats(ws) {
-    document.getElementById('statAgents').textContent   = ws.online_agents !== undefined ? ws.online_agents : (ws.total_agents || '—');
-    document.getElementById('statAgentsSub').textContent = ws.total_agents ? ('/ ' + ws.total_agents + ' total') : '';
-    document.getElementById('statMonsters').textContent = ws.total_monsters !== undefined ? ws.total_monsters : '—';
-    document.getElementById('statKills').textContent    = ws.total_kills    !== undefined ? ws.total_kills    : '—';
-
-    if (ws.highest_level_agent) {
-      document.getElementById('statHighLv').textContent   = ws.highest_level_agent.level || '—';
-      document.getElementById('statHighName').textContent = ws.highest_level_agent.name  || '';
-    } else {
-      document.getElementById('statHighLv').textContent   = '—';
-      document.getElementById('statHighName').textContent = '';
-    }
-
-    var onlineCount = ws.online_agents !== undefined ? ws.online_agents : (ws.total_agents || 0);
-    document.getElementById('headerAgentCount').textContent = onlineCount;
-    document.getElementById('sideAgentCount').textContent   = onlineCount;
-  }
-
-  /* ── Map node update ── */
-  function updateMapNodes(locations, agents) {
-    var locMap = {};
-    (locations || []).forEach(function(l) { locMap[l.id] = l; });
-
-    var agentsByLoc = {};
-    (agents || []).forEach(function(a) {
-      if (!agentsByLoc[a.location_id]) agentsByLoc[a.location_id] = [];
-      agentsByLoc[a.location_id].push(a);
-    });
-
-    var locIds = ['starter_village', 'dark_forest', 'town_market', 'mine_entrance', 'abandoned_graveyard'];
-
-    locIds.forEach(function(id) {
-      var loc     = locMap[id] || {};
-      var agCount = loc.agent_count  !== undefined ? loc.agent_count  : (agentsByLoc[id] ? agentsByLoc[id].length : 0);
-      var monCount= loc.monster_count!== undefined ? loc.monster_count: 0;
-
-      var pulse   = document.getElementById('pulse-' + id);
-      var agdot   = document.getElementById('agdot-' + id);
-      var agc     = document.getElementById('agcount-' + id);
-      var mondot  = document.getElementById('mondot-' + id);
-      var monc    = document.getElementById('moncount-' + id);
-      var combatG = document.getElementById('combat-' + id);
-
-      if (pulse) {
-        pulse.setAttribute('opacity', agCount > 0 ? '0.3' : '0');
-        pulse.style.animation = agCount > 0 ? 'pulse 2s ease-in-out infinite' : 'none';
-      }
-
-      if (agdot)  agdot.setAttribute('opacity', agCount > 0 ? '1' : '0');
-      if (agc)    agc.textContent  = agCount > 0 ? String(agCount) : '';
-      if (mondot) mondot.setAttribute('opacity', monCount > 0 ? '1' : '0');
-      if (monc)   monc.textContent = monCount > 0 ? String(monCount) : '';
-
-      var inCombat = false;
-      if (agentsByLoc[id]) {
-        inCombat = agentsByLoc[id].some(function(a) { return a.status === 'combat'; });
-      }
-      if (combatG) combatG.setAttribute('opacity', inCombat ? '1' : '0');
-    });
-  }
-
-  /* ── Map click handlers ── */
-  function initMapClicks() {
-    var locIds = ['starter_village', 'dark_forest', 'town_market', 'mine_entrance', 'abandoned_graveyard'];
-    locIds.forEach(function(id) {
-      var circle = document.getElementById('circle-' + id);
-      if (circle) {
-        circle.addEventListener('click', function() {
-          selectLocation(id);
-        });
-      }
-    });
-  }
-
-  function selectLocation(id) {
-    // Deselect previous
-    if (state.selectedLocation) {
-      var prev = document.getElementById('circle-' + state.selectedLocation);
-      if (prev) {
-        prev.classList.remove('selected');
-        prev.style.strokeWidth = '1.5';
-        prev.style.fill = '#0a0e14';
-      }
-    }
-
-    if (state.selectedLocation === id) {
-      state.selectedLocation = null;
-      showAgentList();
-      return;
-    }
-
-    state.selectedLocation = id;
-    var circle = document.getElementById('circle-' + id);
-    if (circle) {
-      circle.classList.add('selected');
-      circle.style.strokeWidth = '2.5';
-      circle.style.fill = '#151a24';
-    }
-    showLocationDetail(id);
-  }
-
-  /* ── Side Panel: Agent List ── */
-  function showAgentList() {
-    document.getElementById('agentListHeader').style.display = 'flex';
-    document.getElementById('locDetailHeader').style.display = 'none';
-    renderAgentList();
-  }
-
-  function renderAgentList() {
-    if (!state.data) return;
-    var body   = document.getElementById('sideBody');
-    var agents = (state.data.agents || []).filter(function(a) { return a.status !== 'dead'; });
-
-    while (body.firstChild) body.removeChild(body.firstChild);
-
-    if (!agents.length) {
-      body.appendChild(txt('div', 'empty-msg', '[ NO AGENTS ONLINE ]'));
-      return;
-    }
-
-    agents.forEach(function(agent) {
-      body.appendChild(buildAgentCard(agent));
-    });
-  }
-
-  function buildAgentCard(agent) {
-    var hp     = agent.hp     || 0;
-    var maxHp  = agent.max_hp || 1;
-    var pct    = Math.round((hp / maxHp) * 100);
-    var status = agent.status || 'idle';
-
-    var card = el('div', 'agent-card' + (status === 'combat' ? ' combat' : ''));
-    card.dataset.agentName = agent.name;
-
-    // Header row
-    var hdr = el('div', 'agent-card-header');
-    var nameEl = txt('span', 'agent-name', agent.name);
-    var lvEl   = txt('span', 'agent-lv', 'Lv.' + agent.level);
-    hdr.appendChild(nameEl);
-    hdr.appendChild(lvEl);
-    card.appendChild(hdr);
-
-    // Sub row
-    var sub = el('div', 'agent-card-sub');
-    sub.appendChild(txt('span', 'agent-location', agent.location_name || agent.location_id || '—'));
-    sub.appendChild(txt('span', 'status-badge status-' + status, status));
-    card.appendChild(sub);
-
-    // HP row
-    var hpRow = el('div', 'agent-hp-row');
-    var hpBg  = el('div', 'hp-bar-bg');
-    var hpFill= el('div', 'hp-bar-fill ' + (pct > 60 ? 'hp-high' : pct > 30 ? 'hp-mid' : 'hp-low'));
-    hpFill.style.width = pct + '%';
-    hpBg.appendChild(hpFill);
-    hpRow.appendChild(hpBg);
-    hpRow.appendChild(txt('span', 'hp-pct', pct + '%'));
-    hpRow.appendChild(txt('span', 'hp-nums', hp + '/' + maxHp));
-    card.appendChild(hpRow);
-
-    // Expanded section
-    var expand = el('div', 'agent-expand' + (state.expandedAgents.has(agent.name) ? ' open' : ''));
-    expand.appendChild(buildAgentExpand(agent));
-    card.appendChild(expand);
-
-    card.addEventListener('click', function() {
-      if (state.expandedAgents.has(agent.name)) {
-        state.expandedAgents.delete(agent.name);
-        expand.classList.remove('open');
-      } else {
-        state.expandedAgents.add(agent.name);
-        expand.classList.add('open');
-      }
-    });
-
-    return card;
-  }
-
-  function buildAgentExpand(agent) {
-    var frag = document.createDocumentFragment();
-
-    frag.appendChild(txt('div', 'expand-section-label', 'EQUIPPED'));
-
-    var equipRow = el('div', 'equip-row');
-
-    if (agent.equipped_weapon) {
-      var w = agent.equipped_weapon;
-      var wEl = el('span', 'equip-item rarity-' + (w.rarity || 'white'));
-      wEl.textContent = '\u2694 ' + w.name + (w.attack_bonus ? ' +' + w.attack_bonus : '');
-      equipRow.appendChild(wEl);
-    }
-
-    if (agent.equipped_armor) {
-      var ar = agent.equipped_armor;
-      var arEl = el('span', 'equip-item rarity-' + (ar.rarity || 'white'));
-      arEl.textContent = '\uD83D\uDEE1 ' + ar.name + (ar.defense_bonus ? ' +' + ar.defense_bonus : '');
-      equipRow.appendChild(arEl);
-    }
-
-    if (!agent.equipped_weapon && !agent.equipped_armor) {
-      equipRow.appendChild(txt('span', 'equip-item rarity-white', '(none)'));
-    }
-
-    frag.appendChild(equipRow);
-
-    var statsRow = el('div', 'stats-row-mini');
-    var atkEl = el('span', 'stat-mini');
-    atkEl.textContent = 'ATK ';
-    var atkSpan = el('span');
-    atkSpan.style.color = 'var(--orange)';
-    atkSpan.textContent = agent.attack || 0;
-    atkEl.appendChild(atkSpan);
-    statsRow.appendChild(atkEl);
-
-    var defEl = el('span', 'stat-mini');
-    defEl.textContent = 'DEF ';
-    var defSpan = el('span');
-    defSpan.style.color = 'var(--blue)';
-    defSpan.textContent = agent.defense || 0;
-    defEl.appendChild(defSpan);
-    statsRow.appendChild(defEl);
-
-    var goldEl = el('span', 'stat-mini');
-    goldEl.textContent = 'GOLD ';
-    var goldSpan = el('span');
-    goldSpan.style.color = 'var(--gold)';
-    var gold = agent.gold || 0;
-    goldSpan.textContent = gold >= 1000 ? (gold / 1000).toFixed(1) + 'k' : String(gold);
-    goldEl.appendChild(goldSpan);
-    statsRow.appendChild(goldEl);
-
-    frag.appendChild(statsRow);
-    return frag;
-  }
-
-  /* ── Side Panel: Location Detail ── */
-  function showLocationDetail(locId) {
-    document.getElementById('agentListHeader').style.display = 'none';
-    document.getElementById('locDetailHeader').style.display = 'flex';
-
-    var body = document.getElementById('sideBody');
-    while (body.firstChild) body.removeChild(body.firstChild);
-
-    if (!state.data) return;
-
-    var locData = null;
-    (state.data.locations || []).forEach(function(l) {
-      if (l.id === locId) locData = l;
-    });
-
-    var meta = LOC_META[locId] || {};
-    var name = (locData && locData.name) || meta.name || locId;
-    var desc = (locData && locData.description) || meta.desc || '';
-    var type = (locData && locData.type) || meta.type || 'wild';
-    var lvMin = (locData && locData.level_min) || meta.level_min || 1;
-    var lvMax = (locData && locData.level_max) || meta.level_max || 5;
-
-    // Location header info
-    var detail = el('div', 'loc-detail');
-    detail.appendChild(txt('div', 'loc-detail-name', name.toUpperCase()));
-
-    var typeStr = (type === 'town' ? 'Town' : 'Wild') + ' · Level ' + lvMin + '-' + lvMax;
-    detail.appendChild(txt('div', 'loc-detail-type', typeStr));
-    detail.appendChild(txt('div', 'loc-detail-desc', desc));
-    body.appendChild(detail);
-
-    // Agents at location
-    var agentsHere = (state.data.agents || []).filter(function(a) {
-      return a.location_id === locId && a.status !== 'dead';
-    });
-
-    body.appendChild(txt('div', 'detail-section-label', 'AGENTS HERE'));
-    if (agentsHere.length) {
-      agentsHere.forEach(function(agent) {
-        body.appendChild(buildAgentCard(agent));
-      });
-    } else {
-      body.appendChild(txt('div', 'empty-msg', '(none)'));
-    }
-
-    // Monsters
-    var monsters = (locData && locData.monsters) || [];
-    body.appendChild(txt('div', 'detail-section-label', 'MONSTERS'));
-    if (monsters.length) {
-      monsters.forEach(function(m, i) {
-        var item = el('div', 'monster-item');
-        var prefix = i === monsters.length - 1 ? '\u2514' : '\u251C';
-        item.appendChild(txt('span', 'monster-prefix', prefix));
-        item.appendChild(txt('span', 'monster-name', m.name || 'Unknown'));
-        item.appendChild(txt('span', 'monster-lv', 'Lv.' + (m.level || 1)));
-
-        var hp    = m.hp    || 0;
-        var maxHp = m.max_hp|| 1;
-        var pct   = Math.round((hp / maxHp) * 100);
-        var damaged = hp < maxHp;
-
-        var hpBg = el('div', 'monster-hp-bg');
-        var hpFill = el('div', 'monster-hp-fill' + (damaged ? ' damaged' : ''));
-        hpFill.style.width = pct + '%';
-        hpBg.appendChild(hpFill);
-        item.appendChild(hpBg);
-        item.appendChild(txt('span', 'monster-hp-txt', hp + '/' + maxHp));
-        body.appendChild(item);
-      });
-    } else {
-      body.appendChild(txt('div', 'empty-msg', '(none)'));
-    }
-
-    // Exits
-    var connIds = (locData && locData.connected_to) || LOC_CONNECTIONS[locId] || [];
-    body.appendChild(txt('div', 'detail-section-label', 'EXITS'));
-    if (connIds.length) {
-      connIds.forEach(function(connId) {
-        var connMeta = LOC_META[connId] || {};
-        var connLocData = null;
-        (state.data.locations || []).forEach(function(l) {
-          if (l.id === connId) connLocData = l;
-        });
-        var connName = (connLocData && connLocData.name) || connMeta.name || connId;
-        var connType = (connLocData && connLocData.type) || connMeta.type || 'wild';
-        var connMin  = (connLocData && connLocData.level_min) || connMeta.level_min || 1;
-        var connMax  = (connLocData && connLocData.level_max) || connMeta.level_max || 5;
-
-        var exitEl = el('div', 'exit-item');
-        exitEl.appendChild(txt('span', 'exit-arrow', '\u2192'));
-
-        var nameSpan = el('span');
-        nameSpan.style.color = connType === 'town' ? 'var(--blue)' : 'var(--orange)';
-        nameSpan.textContent = connName;
-        exitEl.appendChild(nameSpan);
-
-        var typeSpan = txt('span', 'exit-type', '(' + connType + ', Lv.' + connMin + '-' + connMax + ')');
-        exitEl.appendChild(typeSpan);
-
-        exitEl.addEventListener('click', function() { selectLocation(connId); });
-        body.appendChild(exitEl);
-      });
-    } else {
-      body.appendChild(txt('div', 'empty-msg', '(no exits)'));
-    }
-  }
-
-  /* ── Event Feed ── */
-  function updateFeed(events) {
-    if (!events || !events.length) return;
-
-    var list = document.getElementById('feedList');
-    var newEvents = [];
-
-    events.forEach(function(ev) {
-      var evKey = (ev.timestamp || '') + '|' + (ev.message || '') + '|' + (ev.event_type || '');
-      if (!state.knownEventIds.has(evKey)) {
-        state.knownEventIds.add(evKey);
-        newEvents.push(ev);
-      }
-    });
-
-    // Keep set from growing too large
-    if (state.knownEventIds.size > 500) {
-      var arr = Array.from(state.knownEventIds);
-      arr.splice(0, arr.length - 300);
-      state.knownEventIds = new Set(arr);
-    }
-
-    newEvents.forEach(function(ev) {
-      var row = el('div', 'feed-row new-event');
-
-      var ts = ev.timestamp || '';
-      var timePart = ts.length > 8 ? ts.slice(-8) : ts;
-      row.appendChild(txt('span', 'feed-time', timePart));
-
-      var evType = (ev.event_type || 'default').toLowerCase();
-      var badgeClass = 'feed-badge badge-' + (
-        ['combat','loot','move','death','levelup','trade'].indexOf(evType) >= 0 ? evType : 'default'
-      );
-      row.appendChild(txt('span', badgeClass, evType.toUpperCase()));
-      row.appendChild(txt('span', 'feed-msg', ev.message || ''));
-
-      list.insertBefore(row, list.firstChild);
-    });
-
-    // Trim old rows
-    while (list.children.length > 50) {
-      list.removeChild(list.lastChild);
-    }
-  }
-
-  /* ── Full render ── */
-  function render() {
-    if (!state.data) return;
-    var d = state.data;
-
-    updateStats(d.world_stats || {});
-    updateMapNodes(d.locations, d.agents);
-    updateFeed(d.recent_events);
-
-    if (state.selectedLocation) {
-      showLocationDetail(state.selectedLocation);
-    } else {
-      renderAgentList();
-    }
-  }
-
-  /* ── Fetch ── */
-  function fetchDashboard() {
-    fetch(API_URL)
-      .then(function(resp) {
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        return resp.json();
-      })
-      .then(function(json) {
-        if (!json.ok) throw new Error(json.error || 'API error');
-        state.tick++;
-        state.data = json.data;
-        document.getElementById('tickNum').textContent = state.tick;
-        render();
-      })
-      .catch(function(err) {
-        console.error('[AgentForge] Fetch failed:', err.message);
-        state.tick++;
-        document.getElementById('tickNum').textContent = state.tick;
-        if (!state.data) {
-          document.getElementById('statAgents').textContent   = '—';
-          document.getElementById('statMonsters').textContent = '—';
-          document.getElementById('statKills').textContent    = '—';
-          document.getElementById('statHighLv').textContent   = '—';
-        }
-      });
-  }
-
-  /* ── Back link ── */
-  document.getElementById('backLink').addEventListener('click', function() {
-    if (state.selectedLocation) {
-      var prev = document.getElementById('circle-' + state.selectedLocation);
-      if (prev) {
-        prev.classList.remove('selected');
-        prev.style.strokeWidth = '1.5';
-        prev.style.fill = '#0a0e14';
-      }
-    }
-    state.selectedLocation = null;
-    showAgentList();
+(function() {
+'use strict';
+
+/* ===== CONFIG ===== */
+var LOC_CENTERS = {
+  spawn_terminal:  { x: 280, y: 55  },
+  npm_commons:     { x: 100, y: 160 },
+  pypi_shores:     { x: 280, y: 250 },
+  crates_peaks:    { x: 460, y: 100 },
+  maven_depths:    { x: 460, y: 250 },
+  package_bazaar:  { x: 280, y: 155 }
+};
+var LOC_META = {
+  spawn_terminal:  { name:'The Terminal',    type:'town', color:'#1f6feb' },
+  npm_commons:     { name:'NPM Commons',     type:'wild', color:'#f0883e' },
+  pypi_shores:     { name:'PyPI Shores',     type:'wild', color:'#f0883e' },
+  crates_peaks:    { name:'Crates Peaks',    type:'wild', color:'#da3633' },
+  maven_depths:    { name:'Maven Depths',    type:'wild', color:'#8b2020' },
+  package_bazaar:  { name:'Package Bazaar',  type:'town', color:'#e3b341' }
+};
+var CONNECTIONS = [
+  ['spawn_terminal','npm_commons'], ['spawn_terminal','pypi_shores'],
+  ['npm_commons','pypi_shores'],    ['npm_commons','crates_peaks'],
+  ['npm_commons','package_bazaar'],['pypi_shores','package_bazaar'],
+  ['pypi_shores','maven_depths'],  ['crates_peaks','maven_depths']
+];
+var CLASS_CONFIG = {
+  Assassin:  { abbr:'A', color:'#58a6ff' },
+  Mage:      { abbr:'M', color:'#d2a8ff' },
+  Warrior:   { abbr:'W', color:'#f85149' },
+  Ranger:    { abbr:'R', color:'#3fb950' },
+  Paladin:   { abbr:'P', color:'#e3b341' },
+  Berserker: { abbr:'B', color:'#f85149' },
+  Bard:      { abbr:'D', color:'#d2a8ff' },
+  Sage:      { abbr:'S', color:'#8b949e' },
+  Novice:    { abbr:'N', color:'#8b949e' }
+};
+
+/* ===== STATE ===== */
+var state = { agents:[], locations:{}, stats:{}, battles:[], tick:0 };
+var feedItems = [];
+var seenEventIds = new Set();
+var prevAgentLocs = {};
+var prevBattleRounds = {};
+var viewMode = 'agents';
+var selectedLocation = null;
+var selectedBattleAgent = null;
+var spectateMode = false;
+var trackedAgent = null;
+var expandedAgent = null;
+
+/* agent movement animation state */
+var movingAgents = {};   /* name → { fromX, fromY, toX, toY, startTime } */
+var trailLines = [];     /* { x1,y1,x2,y2, startTime } */
+var attackFlashes = [];  /* { x,y, startTime } */
+var damageFloats = [];   /* { x,y,text,color,startTime } */
+var victoryBursts = [];  /* { x,y,startTime } */
+
+/* ===== SVG NAMESPACE ===== */
+var SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag) { return document.createElementNS(SVG_NS, tag); }
+
+/* ===== HELPERS ===== */
+function hpColor(pct) {
+  if (pct > 0.5) return '#3fb950';
+  if (pct > 0.25) return '#e3b341';
+  return '#f85149';
+}
+
+function getAgentPos(locId, index, total) {
+  var c = LOC_CENTERS[locId];
+  if (!c) return { x: 0, y: 0 };
+  if (total <= 1) return { x: c.x + 30, y: c.y - 5 };
+  var angle = (Math.PI * 2 * index / total) - Math.PI / 2;
+  return { x: c.x + Math.cos(angle) * 30 + 15, y: c.y + Math.sin(angle) * 25 };
+}
+
+function rarityClass(r) {
+  var m = { white:'rarity-white', green:'rarity-green', blue:'rarity-blue', purple:'rarity-purple' };
+  return m[r] || 'rarity-white';
+}
+
+function classInfo(cls) {
+  return CLASS_CONFIG[cls] || { abbr: (cls||'?').charAt(0).toUpperCase(), color: '#8b949e' };
+}
+
+/* ===== DATA UPDATE ===== */
+function updateState(raw) {
+  var d = raw.data || raw;
+
+  /* detect movement */
+  var newLocs = {};
+
+  state.agents = (d.agents || []).map(function(a) {
+    a.location = a.location_id;
+    return a;
   });
 
-  /* ── Boot ── */
-  initMapClicks();
-  fetchDashboard();
-  setInterval(fetchDashboard, POLL_MS);
+  state.agents.forEach(function(a) {
+    newLocs[a.name] = a.location;
+    if (prevAgentLocs[a.name] && prevAgentLocs[a.name] !== a.location) {
+      triggerMove(a.name, prevAgentLocs[a.name], a.location);
+    }
+  });
+  prevAgentLocs = newLocs;
+
+  /* locations */
+  var locs = {};
+  (d.locations || []).forEach(function(l) { locs[l.id] = l; });
+  state.locations = locs;
+
+  state.stats = d.world_stats || {};
+
+  /* detect new battle rounds */
+  var battles = d.active_battles || [];
+  battles.forEach(function(b) {
+    var prev = prevBattleRounds[b.battle_id] || 0;
+    var cur  = (b.rounds || []).length;
+    if (cur > prev) {
+      var newRounds = (b.rounds || []).slice(prev);
+      triggerBattleAnims(b, newRounds);
+    }
+    prevBattleRounds[b.battle_id] = cur;
+  });
+  state.battles = battles;
+  state.tick++;
+
+  /* events */
+  (d.recent_events || []).forEach(function(ev) {
+    ev.type = ev.event_type || 'default';
+    ev.time = (ev.timestamp || '').slice(11, 19);
+    var id = (ev.timestamp || '') + ':' + ev.type + ':' + (ev.message || '');
+    if (!seenEventIds.has(id)) {
+      seenEventIds.add(id);
+      feedItems.unshift({ ev: ev, isNew: true });
+      /* victory burst */
+      if (ev.type === 'combat' && (ev.message || '').indexOf('擊敗') !== -1 && ev.location_id) {
+        triggerVictoryBurst(ev.location_id);
+      }
+    }
+  });
+  if (feedItems.length > 50) feedItems.length = 50;
+}
+
+function triggerMove(agentName, fromLocId, toLocId) {
+  var agent = state.agents.find(function(a) { return a.name === agentName; });
+  if (!agent) return;
+  var agentsAtFrom = state.agents.filter(function(a) { return a.location === fromLocId; });
+  var agentsAtTo   = state.agents.filter(function(a) { return a.location === toLocId; });
+  var fromIdx = agentsAtFrom.findIndex ? agentsAtFrom.findIndex(function(a) { return a.name === agentName; }) : 0;
+  var toIdx   = agentsAtTo.findIndex   ? agentsAtTo.findIndex(function(a)   { return a.name === agentName; }) : 0;
+  var fromPos = getAgentPos(fromLocId, fromIdx, agentsAtFrom.length || 1);
+  var toPos   = getAgentPos(toLocId,   toIdx,   agentsAtTo.length   || 1);
+  movingAgents[agentName] = { fromX: fromPos.x, fromY: fromPos.y, toX: toPos.x, toY: toPos.y, startTime: Date.now() };
+  trailLines.push({ x1: fromPos.x, y1: fromPos.y, x2: toPos.x, y2: toPos.y, startTime: Date.now() });
+}
+
+function triggerBattleAnims(battle, newRounds) {
+  /* find agent and monster positions */
+  var agent = state.agents.find(function(a) { return a.name === battle.agent_name; });
+  if (!agent) return;
+  var agentIdx = 0, total = 1;
+  var agentsHere = state.agents.filter(function(a) { return a.location === agent.location; });
+  if (agentsHere.findIndex) agentIdx = agentsHere.findIndex(function(a) { return a.name === agent.name; });
+  total = agentsHere.length || 1;
+  var aPos = getAgentPos(agent.location, agentIdx, total);
+  var lc   = LOC_CENTERS[agent.location] || { x: 280, y: 155 };
+
+  newRounds.forEach(function(round) {
+    var mxOffset = 12 + (Math.random() * 8 - 4);
+    var myOffset = -16 + (Math.random() * 8 - 4);
+    var mx = lc.x + mxOffset;
+    var my = lc.y + myOffset;
+    var midX = (aPos.x + mx) / 2;
+    var midY = (aPos.y + my) / 2;
+    attackFlashes.push({ x: midX, y: midY, startTime: Date.now() });
+    if (round.attacker === 'agent') {
+      damageFloats.push({ x: mx, y: my - 5, text: '-' + round.damage + (round.crit ? '!' : ''), color: round.crit ? '#e3b341' : '#3fb950', startTime: Date.now() });
+    } else {
+      damageFloats.push({ x: aPos.x, y: aPos.y - 12, text: '-' + round.damage + (round.crit ? '!' : ''), color: round.crit ? '#e3b341' : '#f85149', startTime: Date.now() });
+    }
+  });
+}
+
+function triggerVictoryBurst(locId) {
+  var c = LOC_CENTERS[locId];
+  if (!c) return;
+  victoryBursts.push({ x: c.x, y: c.y, startTime: Date.now() });
+}
+
+/* ===== RENDER ===== */
+function render() {
+  renderHeader();
+  renderStats();
+  renderMap();
+  renderFeed();
+  renderSidePanel();
+}
+
+/* Header */
+function renderHeader() {
+  document.getElementById('tickNum').textContent = state.tick;
+  document.getElementById('headerAgentCount').textContent = (state.stats.online_agents || state.agents.length || 0);
+}
+
+/* Stats Bar */
+function renderStats() {
+  var s = state.stats;
+  var agents = s.online_agents !== undefined ? s.online_agents : state.agents.length;
+  var monsters = s.total_monsters !== undefined ? s.total_monsters : 0;
+
+  setTxt('statAgents', agents);
+  setTxt('statAgentsSub', 'of ' + (s.total_agents || agents) + ' total');
+  setTxt('statMonsters', monsters);
+
+  var combatCount = state.battles.length;
+  setTxt('statMonstersSub', combatCount + ' in combat');
+  setTxt('statKills', s.total_kills !== undefined ? s.total_kills : '—');
+  setTxt('statKillsSub', 'all time');
+
+  if (s.highest_level_agent) {
+    setTxt('statHighLevel', s.highest_level_agent.level);
+    setTxt('statHighLevelSub', s.highest_level_agent.name);
+  } else {
+    setTxt('statHighLevel', '—');
+    setTxt('statHighLevelSub', '');
+  }
+}
+
+function setTxt(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+/* ===== MAP ===== */
+var mapInitialized = false;
+var connLineEls = {};    /* 'a-b' → SVGElement */
+var locNodeEls  = {};    /* locId → g element */
+var agentLayerEl = null;
+var overlayLayerEl = null;
+
+function getMapSize() {
+  var wrapper = document.getElementById('mapWrapper');
+  return { w: wrapper.offsetWidth || 560, h: wrapper.offsetHeight || 380 };
+}
+
+function mapScale() {
+  var sz = getMapSize();
+  return { sx: sz.w / 560, sy: sz.h / 380 };
+}
+
+function tx(x) { return x * mapScale().sx; }
+function ty(y) { return y * mapScale().sy; }
+
+function renderMap() {
+  var svg = document.getElementById('worldMap');
+  var sz = getMapSize();
+  svg.setAttribute('viewBox', '0 0 560 380');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  if (!mapInitialized) {
+    initMapStatic(svg, sz);
+    mapInitialized = true;
+  }
+  updateMapDynamic(svg);
+}
+
+function initMapStatic(svg) {
+  /* Background grid dots */
+  var bg = svgEl('g');
+  bg.setAttribute('class', 'map-bg');
+  for (var gx = 20; gx <= 540; gx += 30) {
+    for (var gy = 15; gy <= 365; gy += 30) {
+      var dot = svgEl('circle');
+      dot.setAttribute('cx', gx);
+      dot.setAttribute('cy', gy);
+      dot.setAttribute('r', '0.8');
+      dot.setAttribute('fill', '#1a1f2b');
+      bg.appendChild(dot);
+    }
+  }
+  svg.appendChild(bg);
+
+  /* Continent outline — right-angle circuit board shape */
+  var outline = svgEl('path');
+  outline.setAttribute('d',
+    'M 60,30 L 500,30 L 500,80 L 510,80 L 510,320 L 460,320 L 460,360 L 60,360 L 60,300 L 40,300 L 40,110 L 60,110 Z'
+  );
+  outline.setAttribute('fill', 'none');
+  outline.setAttribute('stroke', '#1a2030');
+  outline.setAttribute('stroke-width', '1.5');
+  svg.appendChild(outline);
+
+  /* Connection lines */
+  var connLayer = svgEl('g');
+  connLayer.setAttribute('id', 'connLayer');
+  CONNECTIONS.forEach(function(pair) {
+    var a = pair[0], b = pair[1];
+    var ca = LOC_CENTERS[a], cb = LOC_CENTERS[b];
+    if (!ca || !cb) return;
+    var key = a + '-' + b;
+    var line = svgEl('line');
+    line.setAttribute('x1', ca.x); line.setAttribute('y1', ca.y);
+    line.setAttribute('x2', cb.x); line.setAttribute('y2', cb.y);
+    line.setAttribute('stroke', '#1e2d40');
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('stroke-dasharray', '5 4');
+    line.style.animation = 'dashFlow 1.5s linear infinite';
+    connLayer.appendChild(line);
+    connLineEls[key] = line;
+  });
+  svg.appendChild(connLayer);
+
+  /* Location nodes */
+  var locLayer = svgEl('g');
+  locLayer.setAttribute('id', 'locLayer');
+  Object.keys(LOC_CENTERS).forEach(function(locId) {
+    var c    = LOC_CENTERS[locId];
+    var meta = LOC_META[locId] || { name: locId, type:'wild', color:'#8b949e' };
+    var g = svgEl('g');
+    g.setAttribute('class', 'loc-node');
+    g.setAttribute('data-loc', locId);
+    g.style.cursor = 'pointer';
+
+    /* Outer ring */
+    var ring = svgEl('circle');
+    ring.setAttribute('cx', c.x); ring.setAttribute('cy', c.y); ring.setAttribute('r', '14');
+    ring.setAttribute('fill', 'rgba(0,0,0,0.5)');
+    ring.setAttribute('stroke', meta.color);
+    ring.setAttribute('stroke-width', '1.5');
+
+    /* Inner dot */
+    var inner = svgEl('circle');
+    inner.setAttribute('cx', c.x); inner.setAttribute('cy', c.y); inner.setAttribute('r', '5');
+    inner.setAttribute('fill', meta.color);
+    inner.setAttribute('opacity', '0.85');
+
+    /* Label */
+    var lbl = svgEl('text');
+    lbl.setAttribute('x', c.x); lbl.setAttribute('y', c.y + 26);
+    lbl.setAttribute('text-anchor', 'middle');
+    lbl.setAttribute('font-size', '9');
+    lbl.setAttribute('font-family', "'SF Mono', Consolas, monospace");
+    lbl.setAttribute('fill', '#8b949e');
+    lbl.setAttribute('letter-spacing', '0.5');
+    lbl.textContent = meta.name;
+
+    /* Type indicator */
+    var typeLbl = svgEl('text');
+    typeLbl.setAttribute('x', c.x); typeLbl.setAttribute('y', c.y + 35);
+    typeLbl.setAttribute('text-anchor', 'middle');
+    typeLbl.setAttribute('font-size', '7');
+    typeLbl.setAttribute('font-family', "'SF Mono', Consolas, monospace");
+    typeLbl.setAttribute('fill', meta.type === 'town' ? '#1f6feb' : '#484f58');
+    typeLbl.textContent = meta.type === 'town' ? '[TOWN]' : '[WILD]';
+
+    g.appendChild(ring); g.appendChild(inner); g.appendChild(lbl); g.appendChild(typeLbl);
+    g.addEventListener('click', function() { onLocClick(locId); });
+    locLayer.appendChild(g);
+    locNodeEls[locId] = g;
+  });
+  svg.appendChild(locLayer);
+
+  /* Dynamic layers */
+  agentLayerEl   = svgEl('g'); agentLayerEl.setAttribute('id', 'agentLayer');
+  overlayLayerEl = svgEl('g'); overlayLayerEl.setAttribute('id', 'overlayLayer');
+  svg.appendChild(agentLayerEl);
+  svg.appendChild(overlayLayerEl);
+}
+
+function updateMapDynamic(svg) {
+  /* Clear dynamic layers */
+  while (agentLayerEl.firstChild) agentLayerEl.removeChild(agentLayerEl.firstChild);
+  while (overlayLayerEl.firstChild) overlayLayerEl.removeChild(overlayLayerEl.firstChild);
+
+  /* Highlight active battle connection lines */
+  CONNECTIONS.forEach(function(pair) {
+    var key = pair[0] + '-' + pair[1];
+    var el = connLineEls[key];
+    if (!el) return;
+    el.setAttribute('stroke', '#1e2d40');
+    el.setAttribute('stroke-width', '1.5');
+  });
+
+  /* Trail lines */
+  var now = Date.now();
+  trailLines = trailLines.filter(function(t) { return now - t.startTime < 2000; });
+  trailLines.forEach(function(t) {
+    var age = (now - t.startTime) / 2000;
+    var line = svgEl('line');
+    line.setAttribute('x1', t.x1); line.setAttribute('y1', t.y1);
+    line.setAttribute('x2', t.x2); line.setAttribute('y2', t.y2);
+    line.setAttribute('stroke', '#58a6ff');
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('stroke-dasharray', '4 4');
+    line.setAttribute('opacity', String(0.6 * (1 - age)));
+    overlayLayerEl.appendChild(line);
+  });
+
+  /* Victory bursts */
+  victoryBursts = victoryBursts.filter(function(b) { return now - b.startTime < 900; });
+  victoryBursts.forEach(function(b) {
+    var age = (now - b.startTime) / 900;
+    var burst = svgEl('circle');
+    burst.setAttribute('cx', b.x); burst.setAttribute('cy', b.y);
+    burst.setAttribute('r', String(5 + age * 38));
+    burst.setAttribute('fill', 'none');
+    burst.setAttribute('stroke', '#e3b341');
+    burst.setAttribute('stroke-width', '2');
+    burst.setAttribute('opacity', String(0.9 * (1 - age)));
+    overlayLayerEl.appendChild(burst);
+  });
+
+  /* Monster indicators per location */
+  Object.keys(state.locations).forEach(function(locId) {
+    var loc = state.locations[locId];
+    var c = LOC_CENTERS[locId];
+    if (!c || !loc.monsters) return;
+    loc.monsters.forEach(function(m, mi) {
+      var angle = (Math.PI * 2 * mi / Math.max(loc.monsters.length, 1)) + Math.PI * 0.25;
+      var dist = 22;
+      var mx = c.x + Math.cos(angle) * dist;
+      var my = c.y + Math.sin(angle) * dist;
+      var pct = m.max_hp > 0 ? m.hp / m.max_hp : 1;
+      var mcolor = pct < 1 ? '#e3b341' : '#da3633';
+      var diamond = svgEl('polygon');
+      var dx = 4, dy = 5;
+      diamond.setAttribute('points',
+        mx + ',' + (my - dy) + ' ' +
+        (mx + dx) + ',' + my + ' ' +
+        mx + ',' + (my + dy) + ' ' +
+        (mx - dx) + ',' + my
+      );
+      diamond.setAttribute('fill', mcolor);
+      diamond.setAttribute('opacity', '0.8');
+      overlayLayerEl.appendChild(diamond);
+    });
+  });
+
+  /* Battle links */
+  state.battles.forEach(function(battle) {
+    var agent = state.agents.find(function(a) { return a.name === battle.agent_name; });
+    if (!agent) return;
+    var agentsHere = state.agents.filter(function(a) { return a.location === agent.location; });
+    var aIdx = agentsHere.findIndex ? agentsHere.findIndex(function(a) { return a.name === agent.name; }) : 0;
+    var aPos = getAgentPos(agent.location, aIdx, agentsHere.length || 1);
+    var c = LOC_CENTERS[agent.location] || { x:280, y:155 };
+    var bline = svgEl('line');
+    bline.setAttribute('x1', aPos.x); bline.setAttribute('y1', aPos.y);
+    bline.setAttribute('x2', c.x + 12);   bline.setAttribute('y2', c.y - 16);
+    bline.setAttribute('stroke', '#f85149');
+    bline.setAttribute('stroke-width', '1.5');
+    bline.setAttribute('stroke-dasharray', '4 3');
+    bline.setAttribute('opacity', '0.65');
+    bline.style.animation = 'dashFlow 0.8s linear infinite';
+    overlayLayerEl.appendChild(bline);
+  });
+
+  /* Attack flashes */
+  attackFlashes = attackFlashes.filter(function(f) { return now - f.startTime < 400; });
+  attackFlashes.forEach(function(f) {
+    var age = (now - f.startTime) / 400;
+    var sz = 6 * (1 - age);
+    var l1 = svgEl('line');
+    l1.setAttribute('x1', f.x - sz); l1.setAttribute('y1', f.y - sz);
+    l1.setAttribute('x2', f.x + sz); l1.setAttribute('y2', f.y + sz);
+    l1.setAttribute('stroke', '#f0883e'); l1.setAttribute('stroke-width', '2');
+    l1.setAttribute('opacity', String(1 - age));
+    var l2 = svgEl('line');
+    l2.setAttribute('x1', f.x + sz); l2.setAttribute('y1', f.y - sz);
+    l2.setAttribute('x2', f.x - sz); l2.setAttribute('y2', f.y + sz);
+    l2.setAttribute('stroke', '#f0883e'); l2.setAttribute('stroke-width', '2');
+    l2.setAttribute('opacity', String(1 - age));
+    overlayLayerEl.appendChild(l1);
+    overlayLayerEl.appendChild(l2);
+  });
+
+  /* Damage floats */
+  damageFloats = damageFloats.filter(function(f) { return now - f.startTime < 1000; });
+  damageFloats.forEach(function(f) {
+    var age = (now - f.startTime) / 1000;
+    var ft = svgEl('text');
+    ft.setAttribute('x', f.x);
+    ft.setAttribute('y', String(f.y - age * 32));
+    ft.setAttribute('text-anchor', 'middle');
+    ft.setAttribute('font-size', '10');
+    ft.setAttribute('font-family', "'SF Mono', Consolas, monospace");
+    ft.setAttribute('font-weight', '700');
+    ft.setAttribute('fill', f.color);
+    ft.setAttribute('opacity', String(Math.max(0, 1 - age)));
+    ft.textContent = f.text;
+    overlayLayerEl.appendChild(ft);
+  });
+
+  /* Agent markers */
+  var agentsByLoc = {};
+  state.agents.forEach(function(a) {
+    if (!agentsByLoc[a.location]) agentsByLoc[a.location] = [];
+    agentsByLoc[a.location].push(a);
+  });
+
+  state.agents.forEach(function(agent) {
+    var agentsHere = agentsByLoc[agent.location] || [agent];
+    var idx = agentsHere.indexOf(agent);
+    if (idx === -1) idx = 0;
+    var pos = getAgentPos(agent.location, idx, agentsHere.length);
+
+    /* Check if moving */
+    var mv = movingAgents[agent.name];
+    var drawX = pos.x, drawY = pos.y;
+    if (mv) {
+      var progress = Math.min(1, (now - mv.startTime) / 1000);
+      drawX = mv.fromX + (mv.toX - mv.fromX) * progress;
+      drawY = mv.fromY + (mv.toY - mv.fromY) * progress;
+      if (progress >= 1) delete movingAgents[agent.name];
+    }
+
+    var inCombat = agent.status === 'combat';
+    var ci = classInfo(agent.class);
+    var isDimmed = spectateMode && trackedAgent && trackedAgent !== agent.name;
+
+    var g = svgEl('g');
+    g.setAttribute('class', 'agent-marker');
+    g.style.cursor = 'pointer';
+    g.setAttribute('opacity', isDimmed ? '0.25' : '1');
+
+    /* Aura / pulse ring */
+    var aura = svgEl('circle');
+    aura.setAttribute('cx', drawX); aura.setAttribute('cy', drawY);
+    aura.setAttribute('r', '12');
+    aura.setAttribute('fill', 'none');
+    aura.setAttribute('stroke', inCombat ? '#f0883e' : ci.color);
+    aura.setAttribute('stroke-width', '1.5');
+    if (inCombat) {
+      aura.style.animation = 'combatAura 0.8s ease-in-out infinite';
+    } else {
+      aura.style.animation = 'pulseRing 2s ease-out infinite';
+    }
+    g.appendChild(aura);
+
+    /* Main circle */
+    var circle = svgEl('circle');
+    circle.setAttribute('cx', drawX); circle.setAttribute('cy', drawY);
+    circle.setAttribute('r', '10');
+    circle.setAttribute('fill', 'rgba(0,0,0,0.75)');
+    circle.setAttribute('stroke', ci.color);
+    circle.setAttribute('stroke-width', '1.5');
+    g.appendChild(circle);
+
+    /* Class letter */
+    var letter = svgEl('text');
+    letter.setAttribute('x', drawX); letter.setAttribute('y', String(drawY + 4));
+    letter.setAttribute('text-anchor', 'middle');
+    letter.setAttribute('font-size', '9');
+    letter.setAttribute('font-family', "'SF Mono', Consolas, monospace");
+    letter.setAttribute('font-weight', '700');
+    letter.setAttribute('fill', ci.color);
+    letter.textContent = ci.abbr;
+    g.appendChild(letter);
+
+    /* Name label */
+    var nameLbl = svgEl('text');
+    nameLbl.setAttribute('x', drawX); nameLbl.setAttribute('y', String(drawY + 22));
+    nameLbl.setAttribute('text-anchor', 'middle');
+    nameLbl.setAttribute('font-size', '8.5');
+    nameLbl.setAttribute('font-family', "'SF Mono', Consolas, monospace");
+    nameLbl.setAttribute('fill', '#c9d1d9');
+    nameLbl.textContent = agent.name + ' Lv.' + agent.level;
+    g.appendChild(nameLbl);
+
+    g.addEventListener('click', function() { onAgentMarkerClick(agent); });
+    agentLayerEl.appendChild(g);
+  });
+}
+
+/* ===== FEED ===== */
+var RARE_KEYWORDS = ['Vim', 'Emacs', 'Kubernetes', 'Git Blame'];
+
+function renderFeed() {
+  var list = document.getElementById('feedList');
+  var items = feedItems;
+  var existingRows = list.children.length;
+  var newCount = 0;
+
+  items.forEach(function(item, i) {
+    if (i >= 50) return;
+    if (item.rendered) { item.isNew = false; return; }
+    item.rendered = true;
+    newCount++;
+
+    var ev = item.ev;
+    var row = document.createElement('div');
+    row.className = 'feed-row';
+    if (item.isNew) row.classList.add('new-event');
+    if (ev.type === 'levelup') row.classList.add('flash-levelup');
+    if (ev.type === 'death')   row.classList.add('flash-death');
+
+    var isRare = RARE_KEYWORDS.some(function(k) { return (ev.message || '').indexOf(k) !== -1; });
+    if (isRare) row.classList.add('rare-loot');
+
+    var timeEl = document.createElement('span');
+    timeEl.className = 'feed-time';
+    timeEl.textContent = ev.time || '';
+
+    var badge = document.createElement('span');
+    badge.className = 'feed-badge badge-' + (ev.type || 'default');
+    badge.textContent = ev.type || 'msg';
+
+    var msg = document.createElement('span');
+    msg.className = 'feed-msg';
+    var prefix = ev.type === 'levelup' ? '★ ' : '';
+    msg.textContent = prefix + (ev.message || '');
+
+    row.appendChild(timeEl);
+    row.appendChild(badge);
+    row.appendChild(msg);
+
+    /* Prepend to front */
+    if (list.firstChild) {
+      list.insertBefore(row, list.firstChild);
+    } else {
+      list.appendChild(row);
+    }
+
+    item.isNew = false;
+  });
+
+  /* Trim excess rows */
+  while (list.children.length > 50) {
+    list.removeChild(list.lastChild);
+  }
+}
+
+/* ===== SIDE PANEL ===== */
+function renderSidePanel() {
+  if (viewMode === 'agents') renderAgentList();
+  else if (viewMode === 'location') renderLocationDetail();
+  else if (viewMode === 'battle') renderBattlePanel();
+}
+
+function renderAgentList() {
+  setTxt('sideTitle', 'Agents (' + state.agents.length + ')');
+  var back = document.getElementById('backLink');
+  back.style.display = 'none';
+
+  var body = document.getElementById('sideBody');
+  /* rebuild only if agent count or tick changed to avoid flicker */
+  body.innerHTML = '';
+
+  state.agents.forEach(function(agent) {
+    var card = document.createElement('div');
+    card.className = 'agent-card ' + (agent.status || 'idle');
+
+    var hdr = document.createElement('div');
+    hdr.className = 'agent-card-header';
+
+    var left = document.createElement('div');
+    var nameEl = document.createElement('span');
+    nameEl.className = 'agent-name';
+    nameEl.textContent = agent.name;
+    var lvEl = document.createElement('span');
+    lvEl.className = 'agent-lv';
+    lvEl.textContent = ' Lv.' + agent.level;
+    left.appendChild(nameEl); left.appendChild(lvEl);
+
+    var statusEl = document.createElement('span');
+    statusEl.className = 'status-badge status-' + (agent.status || 'idle');
+    statusEl.textContent = agent.status || 'idle';
+
+    hdr.appendChild(left); hdr.appendChild(statusEl);
+    card.appendChild(hdr);
+
+    var meta = document.createElement('div');
+    meta.className = 'agent-meta';
+    var ci = classInfo(agent.class);
+    meta.textContent = agent.class + ' · ' + (agent.primary_language || '?') + ' · ' + (agent.location_name || agent.location || '?');
+    meta.style.color = ci.color;
+    card.appendChild(meta);
+
+    var hpWrap = document.createElement('div');
+    hpWrap.className = 'hp-bar-wrap';
+    var hpBg = document.createElement('div');
+    hpBg.className = 'hp-bar-bg';
+    var hpFill = document.createElement('div');
+    hpFill.className = 'hp-bar-fill';
+    var pct = agent.max_hp > 0 ? agent.hp / agent.max_hp : 0;
+    hpFill.style.width = Math.max(0, Math.min(100, pct * 100)) + '%';
+    hpFill.style.background = hpColor(pct);
+    if (pct < 0.25) hpFill.classList.add('hp-crit');
+    var hpLbl = document.createElement('div');
+    hpLbl.className = 'hp-bar-label';
+    var hpLeft = document.createElement('span'); hpLeft.textContent = 'HP';
+    var hpRight = document.createElement('span'); hpRight.textContent = agent.hp + '/' + agent.max_hp;
+    hpLbl.appendChild(hpLeft); hpLbl.appendChild(hpRight);
+    hpBg.appendChild(hpFill);
+    hpWrap.appendChild(hpBg); hpWrap.appendChild(hpLbl);
+    card.appendChild(hpWrap);
+
+    card.addEventListener('click', function() { toggleAgentExpand(agent, card); });
+    body.appendChild(card);
+
+    /* Expand if selected */
+    if (expandedAgent === agent.name) {
+      appendAgentExpand(card, agent);
+    }
+  });
+}
+
+function toggleAgentExpand(agent, card) {
+  if (expandedAgent === agent.name) {
+    expandedAgent = null;
+  } else {
+    expandedAgent = agent.name;
+  }
+  renderSidePanel();
+}
+
+function appendAgentExpand(card, agent) {
+  var expand = document.createElement('div');
+  expand.className = 'agent-expand';
+
+  /* Equipment */
+  var eqSection = document.createElement('div');
+  eqSection.className = 'expand-section';
+  var eqTitle = document.createElement('div');
+  eqTitle.className = 'expand-title';
+  eqTitle.textContent = 'Equipment';
+  eqSection.appendChild(eqTitle);
+
+  function equipRow(slot, item) {
+    var row = document.createElement('div');
+    row.className = 'equip-row';
+    var slotEl = document.createElement('span');
+    slotEl.className = 'equip-slot';
+    slotEl.textContent = slot;
+    row.appendChild(slotEl);
+    var nameEl = document.createElement('span');
+    if (item) {
+      nameEl.className = rarityClass(item.rarity);
+      nameEl.textContent = item.name;
+    } else {
+      nameEl.style.color = 'var(--gray)';
+      nameEl.textContent = '(none)';
+    }
+    row.appendChild(nameEl);
+    eqSection.appendChild(row);
+  }
+  equipRow('Weapon', agent.equipped_weapon);
+  equipRow('Armor',  agent.equipped_armor);
+  expand.appendChild(eqSection);
+
+  /* Stats */
+  if (agent.stats) {
+    var stSection = document.createElement('div');
+    stSection.className = 'expand-section';
+    var stTitle = document.createElement('div');
+    stTitle.className = 'expand-title';
+    stTitle.textContent = 'Stats';
+    stSection.appendChild(stTitle);
+    var grid = document.createElement('div');
+    grid.className = 'stat-grid';
+    ['str','int','agi','vit','spd','cha'].forEach(function(k) {
+      var cell = document.createElement('div');
+      cell.className = 'stat-cell';
+      var key = document.createElement('span');
+      key.className = 'stat-key';
+      key.textContent = k.toUpperCase();
+      var val = document.createElement('span');
+      val.className = 'stat-val';
+      val.textContent = agent.stats[k] !== undefined ? agent.stats[k] : '—';
+      cell.appendChild(key); cell.appendChild(val);
+      grid.appendChild(cell);
+    });
+    stSection.appendChild(grid);
+    expand.appendChild(stSection);
+  }
+
+  /* Buffs */
+  if (agent.active_buffs && agent.active_buffs.length > 0) {
+    var bfSection = document.createElement('div');
+    bfSection.className = 'expand-section';
+    var bfTitle = document.createElement('div');
+    bfTitle.className = 'expand-title';
+    bfTitle.textContent = 'Active Buffs';
+    bfSection.appendChild(bfTitle);
+    var buffList = document.createElement('div');
+    buffList.className = 'buff-list';
+    agent.active_buffs.forEach(function(buff) {
+      var tag = document.createElement('span');
+      tag.className = 'buff-tag';
+      tag.textContent = buff.name;
+      buffList.appendChild(tag);
+    });
+    bfSection.appendChild(buffList);
+    expand.appendChild(bfSection);
+  }
+
+  /* Gold / atk / def */
+  var goldRow = document.createElement('div');
+  goldRow.className = 'gold-row';
+  var gEl = document.createElement('span');
+  gEl.textContent = 'Gold: ';
+  var gVal = document.createElement('span');
+  gVal.className = 'gold-val';
+  gVal.textContent = agent.gold !== undefined ? agent.gold : '—';
+  var aEl = document.createElement('span');
+  aEl.textContent = ' ATK: ';
+  var aVal = document.createElement('span');
+  aVal.className = 'atk-val';
+  aVal.textContent = agent.attack !== undefined ? agent.attack : '—';
+  var dEl = document.createElement('span');
+  dEl.textContent = ' DEF: ';
+  var dVal = document.createElement('span');
+  dVal.className = 'def-val';
+  dVal.textContent = agent.defense !== undefined ? agent.defense : '—';
+  goldRow.appendChild(gEl); goldRow.appendChild(gVal);
+  goldRow.appendChild(aEl); goldRow.appendChild(aVal);
+  goldRow.appendChild(dEl); goldRow.appendChild(dVal);
+  expand.appendChild(goldRow);
+
+  /* Watch battle button if in combat */
+  if (agent.status === 'combat') {
+    var btn = document.createElement('button');
+    btn.className = 'btn-watch';
+    btn.textContent = 'WATCH BATTLE';
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openBattle(agent.name);
+    });
+    expand.appendChild(btn);
+  }
+
+  card.appendChild(expand);
+}
+
+/* Location Detail */
+function renderLocationDetail() {
+  var loc = state.locations[selectedLocation] || {};
+  var meta = LOC_META[selectedLocation] || {};
+  setTxt('sideTitle', 'Location');
+  var back = document.getElementById('backLink');
+  back.style.display = '';
+
+  var body = document.getElementById('sideBody');
+  body.innerHTML = '';
+
+  var panel = document.createElement('div');
+  panel.className = 'loc-panel';
+
+  var nameEl = document.createElement('div');
+  nameEl.className = 'loc-panel-name';
+  nameEl.textContent = loc.name || meta.name || selectedLocation;
+  panel.appendChild(nameEl);
+
+  var metaEl = document.createElement('div');
+  metaEl.className = 'loc-panel-meta';
+  var typeStr = (loc.type || meta.type || 'wild').toUpperCase();
+  var lvStr = loc.level_min !== undefined ? 'Lv.' + loc.level_min + '-' + loc.level_max : '';
+  metaEl.textContent = typeStr + (lvStr ? ' · ' + lvStr : '') + ' · Agents: ' + (loc.agent_count || 0) + ' · Monsters: ' + (loc.monster_count || 0);
+  panel.appendChild(metaEl);
+
+  if (loc.description) {
+    var desc = document.createElement('div');
+    desc.className = 'loc-panel-desc';
+    desc.textContent = loc.description;
+    panel.appendChild(desc);
+  }
+
+  /* Monsters */
+  if (loc.monsters && loc.monsters.length > 0) {
+    var mTitle = document.createElement('div');
+    mTitle.className = 'loc-section-title';
+    mTitle.textContent = 'Monsters (' + loc.monsters.length + ')';
+    panel.appendChild(mTitle);
+    loc.monsters.forEach(function(m) {
+      var row = document.createElement('div');
+      row.className = 'monster-row';
+      var nameRow = document.createElement('div');
+      nameRow.className = 'monster-name-row';
+      var mname = document.createElement('span');
+      mname.textContent = m.name;
+      var mlv = document.createElement('span');
+      mlv.className = 'monster-lv';
+      mlv.textContent = 'Lv.' + m.level;
+      nameRow.appendChild(mname); nameRow.appendChild(mlv);
+      var hpWrap = document.createElement('div');
+      hpWrap.className = 'hp-bar-bg';
+      var hpFill = document.createElement('div');
+      hpFill.className = 'hp-bar-fill';
+      var pct = m.max_hp > 0 ? m.hp / m.max_hp : 0;
+      hpFill.style.width = Math.max(0, pct * 100) + '%';
+      hpFill.style.background = hpColor(pct);
+      hpWrap.appendChild(hpFill);
+      row.appendChild(nameRow); row.appendChild(hpWrap);
+      panel.appendChild(row);
+    });
+  }
+
+  /* Agents here */
+  var agentsHere = state.agents.filter(function(a) { return a.location === selectedLocation; });
+  if (agentsHere.length > 0) {
+    var aTitle = document.createElement('div');
+    aTitle.className = 'loc-section-title';
+    aTitle.style.marginTop = '8px';
+    aTitle.textContent = 'Agents Here (' + agentsHere.length + ')';
+    panel.appendChild(aTitle);
+    agentsHere.forEach(function(a) {
+      var arow = document.createElement('div');
+      arow.style.cssText = 'font-size:10px;color:#c9d1d9;padding:2px 0;';
+      arow.textContent = a.name + ' Lv.' + a.level + ' — ' + (a.status || 'idle');
+      panel.appendChild(arow);
+    });
+  }
+
+  /* Exits */
+  if (loc.connected_to && loc.connected_to.length > 0) {
+    var exTitle = document.createElement('div');
+    exTitle.className = 'loc-section-title';
+    exTitle.style.marginTop = '8px';
+    exTitle.textContent = 'Exits';
+    panel.appendChild(exTitle);
+    var exRow = document.createElement('div');
+    exRow.style.paddingTop = '3px';
+    loc.connected_to.forEach(function(dest) {
+      var exitMeta = LOC_META[dest] || {};
+      var btn = document.createElement('span');
+      btn.className = 'exit-btn';
+      btn.textContent = exitMeta.name || dest;
+      btn.addEventListener('click', function() { onLocClick(dest); });
+      exRow.appendChild(btn);
+    });
+    panel.appendChild(exRow);
+  }
+
+  body.appendChild(panel);
+}
+
+/* Battle Panel */
+function renderBattlePanel() {
+  setTxt('sideTitle', 'Battle');
+  var back = document.getElementById('backLink');
+  back.style.display = '';
+
+  var body = document.getElementById('sideBody');
+  body.innerHTML = '';
+
+  var battle = null;
+  if (selectedBattleAgent) {
+    battle = state.battles.find(function(b) { return b.agent_name === selectedBattleAgent; });
+  }
+  if (!battle && state.battles.length > 0) battle = state.battles[0];
+
+  if (!battle) {
+    var noEl = document.createElement('div');
+    noEl.style.cssText = 'padding:20px;color:var(--text);font-size:11px;text-align:center;';
+    noEl.textContent = 'No active battles.';
+    body.appendChild(noEl);
+    return;
+  }
+
+  var panel = document.createElement('div');
+  panel.className = 'battle-panel';
+  panel.style.minHeight = '0';
+
+  /* Monster section */
+  var monSection = document.createElement('div');
+  monSection.className = 'battle-combatant';
+  monSection.style.borderBottom = '1px solid var(--border)';
+
+  var monName = document.createElement('div');
+  monName.className = 'combatant-name';
+  monName.style.color = 'var(--red)';
+  monName.textContent = battle.monster_name;
+  var monMeta = document.createElement('div');
+  monMeta.className = 'combatant-meta';
+  monMeta.textContent = 'Lv.' + battle.monster_level + ' Monster';
+  var monBar = document.createElement('div');
+  monBar.className = 'combatant-hp-bar';
+  var monFill = document.createElement('div');
+  monFill.className = 'combatant-hp-fill';
+  var monPct = battle.monster_max_hp > 0 ? battle.monster_hp / battle.monster_max_hp : 0;
+  monFill.style.width = Math.max(0, monPct * 100) + '%';
+  monFill.style.background = hpColor(monPct);
+  monBar.appendChild(monFill);
+  var monNums = document.createElement('div');
+  monNums.className = 'combatant-hp-nums';
+  monNums.textContent = 'HP ' + battle.monster_hp + ' / ' + battle.monster_max_hp;
+  monSection.appendChild(monName);
+  monSection.appendChild(monMeta);
+  monSection.appendChild(monBar);
+  monSection.appendChild(monNums);
+  panel.appendChild(monSection);
+
+  /* VS */
+  var vs = document.createElement('div');
+  vs.className = 'battle-vs';
+  vs.textContent = 'VS';
+  panel.appendChild(vs);
+
+  /* Agent section */
+  var agt = state.agents.find(function(a) { return a.name === battle.agent_name; }) || {};
+  var ci = classInfo(battle.agent_class);
+
+  var agtSection = document.createElement('div');
+  agtSection.className = 'battle-combatant';
+  agtSection.style.borderBottom = '1px solid var(--border)';
+
+  var agtName = document.createElement('div');
+  agtName.className = 'combatant-name';
+  agtName.style.color = ci.color;
+  agtName.textContent = battle.agent_name;
+  var agtMeta = document.createElement('div');
+  agtMeta.className = 'combatant-meta';
+  agtMeta.textContent = battle.agent_class + ' Lv.' + battle.agent_level;
+  var agtBar = document.createElement('div');
+  agtBar.className = 'combatant-hp-bar';
+  var agtFill = document.createElement('div');
+  agtFill.className = 'combatant-hp-fill';
+  var agtPct = battle.agent_max_hp > 0 ? battle.agent_hp / battle.agent_max_hp : 0;
+  agtFill.style.width = Math.max(0, agtPct * 100) + '%';
+  agtFill.style.background = hpColor(agtPct);
+  if (agtPct < 0.25) agtFill.classList.add('hp-crit');
+  agtBar.appendChild(agtFill);
+  var agtNums = document.createElement('div');
+  agtNums.className = 'combatant-hp-nums';
+  agtNums.textContent = 'HP ' + battle.agent_hp + ' / ' + battle.agent_max_hp;
+  var agtStats = document.createElement('div');
+  agtStats.className = 'agent-combat-stats';
+  function statBit(label, val, color) {
+    var s = document.createElement('span');
+    var l = document.createElement('span');
+    l.style.color = 'var(--text)';
+    l.textContent = label + ': ';
+    var v = document.createElement('span');
+    v.style.cssText = 'font-weight:700;color:' + color;
+    v.textContent = val !== undefined ? val : '—';
+    s.appendChild(l); s.appendChild(v);
+    return s;
+  }
+  agtStats.appendChild(statBit('ATK', agt.attack, 'var(--red)'));
+  agtStats.appendChild(statBit('DEF', agt.defense, 'var(--blue)'));
+  if (agt.stats) agtStats.appendChild(statBit('SPD', agt.stats.spd, 'var(--green)'));
+  agtSection.appendChild(agtName);
+  agtSection.appendChild(agtMeta);
+  agtSection.appendChild(agtBar);
+  agtSection.appendChild(agtNums);
+  agtSection.appendChild(agtStats);
+  panel.appendChild(agtSection);
+
+  /* Battle result overlay */
+  if (battle.status && battle.status !== 'in_progress') {
+    var result = document.createElement('div');
+    result.className = 'battle-result';
+    if (battle.status === 'victory' || battle.status === 'won') {
+      result.classList.add('result-victory');
+      result.textContent = 'VICTORY';
+    } else {
+      result.classList.add('result-defeated');
+      result.textContent = 'DEFEATED';
+    }
+    panel.appendChild(result);
+  }
+
+  /* Battle log */
+  var logTitle = document.createElement('div');
+  logTitle.style.cssText = 'font-size:9px;color:var(--text);text-transform:uppercase;letter-spacing:1.5px;padding:5px 10px 3px;border-bottom:1px solid var(--border);flex-shrink:0;';
+  logTitle.textContent = 'Battle Log';
+  panel.appendChild(logTitle);
+
+  var log = document.createElement('div');
+  log.className = 'battle-log';
+  log.style.flex = '1';
+  log.style.minHeight = '0';
+
+  (battle.rounds || []).forEach(function(round) {
+    var row = document.createElement('div');
+    row.className = 'log-row';
+
+    var dmgSpan = document.createElement('span');
+    if (round.attacker === 'agent') {
+      dmgSpan.className = 'log-dmg-agent';
+      dmgSpan.style.color = round.crit ? 'var(--gold)' : 'var(--green)';
+    } else {
+      dmgSpan.className = 'log-dmg-monster';
+      dmgSpan.style.color = round.crit ? 'var(--gold)' : 'var(--red)';
+    }
+
+    var prefix = round.crit ? '★ ' : '';
+    var msgText = round.message || (round.attacker === 'agent' ? battle.agent_name : battle.monster_name) + ' dealt ' + round.damage;
+    dmgSpan.textContent = prefix + msgText;
+    row.appendChild(dmgSpan);
+    log.appendChild(row);
+  });
+
+  panel.appendChild(log);
+  body.appendChild(panel);
+
+  /* Auto-scroll log to bottom */
+  setTimeout(function() { log.scrollTop = log.scrollHeight; }, 20);
+}
+
+/* ===== INTERACTIONS ===== */
+function onLocClick(locId) {
+  selectedLocation = locId;
+  viewMode = 'location';
+  expandedAgent = null;
+  renderSidePanel();
+}
+
+function onAgentMarkerClick(agent) {
+  if (spectateMode) {
+    trackedAgent = trackedAgent === agent.name ? null : agent.name;
+    renderMap();
+    return;
+  }
+  expandedAgent = agent.name;
+  viewMode = 'agents';
+  renderSidePanel();
+  /* scroll agent card into view */
+  setTimeout(function() {
+    var body = document.getElementById('sideBody');
+    var cards = body.querySelectorAll('.agent-card');
+    for (var i = 0; i < state.agents.length; i++) {
+      if (state.agents[i].name === agent.name && cards[i]) {
+        cards[i].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        break;
+      }
+    }
+  }, 50);
+}
+
+function openBattle(agentName) {
+  selectedBattleAgent = agentName;
+  viewMode = 'battle';
+  expandedAgent = null;
+  renderSidePanel();
+}
+
+document.getElementById('backLink').addEventListener('click', function() {
+  viewMode = 'agents';
+  selectedLocation = null;
+  selectedBattleAgent = null;
+  expandedAgent = null;
+  renderSidePanel();
+});
+
+document.getElementById('btnSpectate').addEventListener('click', toggleSpectate);
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'f' || e.key === 'F') toggleSpectate();
+  if (e.key === 'Escape' && spectateMode) toggleSpectate();
+});
+
+function toggleSpectate() {
+  spectateMode = !spectateMode;
+  if (!spectateMode) trackedAgent = null;
+  document.getElementById('app').classList.toggle('spectate', spectateMode);
+}
+
+/* ===== ANIMATION LOOP ===== */
+var lastAnimTick = 0;
+function animFrame(ts) {
+  if (ts - lastAnimTick > 50) {  /* ~20fps for map overlay */
+    lastAnimTick = ts;
+    var hasActive = attackFlashes.length > 0 || damageFloats.length > 0
+      || victoryBursts.length > 0 || trailLines.length > 0
+      || Object.keys(movingAgents).length > 0;
+    if (hasActive) renderMap();
+  }
+  requestAnimationFrame(animFrame);
+}
+requestAnimationFrame(animFrame);
+
+/* ===== POLL ===== */
+function poll() {
+  fetch('/api/dashboard')
+    .then(function(r) { return r.json(); })
+    .then(function(raw) {
+      updateState(raw);
+      render();
+    })
+    .catch(function(err) {
+      console.error('Poll error:', err);
+    });
+}
+
+setInterval(poll, 2000);
+poll();
+
+})();
 </script>
 </body>
 </html>

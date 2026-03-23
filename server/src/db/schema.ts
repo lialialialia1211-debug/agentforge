@@ -14,8 +14,8 @@ let dbInstance: Database.Database | null = null;
 export function initDb(dbPath?: string): Database.Database {
   if (dbInstance) return dbInstance;
 
-  // Default: server/data/agentforge.db
-  const resolvedPath = dbPath ?? resolve(__dirname, '../../data/agentforge.db');
+  // Default: server/data/codemud.db
+  const resolvedPath = dbPath ?? resolve(__dirname, '../../data/codemud.db');
 
   // Ensure data directory exists
   mkdirSync(dirname(resolvedPath), { recursive: true });
@@ -57,7 +57,7 @@ function createTables(db: Database.Database): void {
       attack      INTEGER NOT NULL DEFAULT 10,
       defense     INTEGER NOT NULL DEFAULT 5,
       gold        INTEGER NOT NULL DEFAULT 50,
-      location_id TEXT NOT NULL DEFAULT 'starter_village',
+      location_id TEXT NOT NULL DEFAULT 'spawn_terminal',
       status      TEXT NOT NULL DEFAULT 'idle'
                     CHECK(status IN ('idle','combat','traveling','dead')),
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -223,6 +223,16 @@ function createTables(db: Database.Database): void {
   try { db.exec("ALTER TABLE agents ADD COLUMN telegram_chat_id TEXT"); } catch {}
   try { db.exec("ALTER TABLE agents ADD COLUMN auto_play INTEGER DEFAULT 1"); } catch {}
 
+  // Add language talent system columns
+  try { db.exec("ALTER TABLE agents ADD COLUMN class TEXT DEFAULT 'Novice'"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN primary_language TEXT DEFAULT 'unknown'"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN str INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN int_stat INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN agi INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN vit INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN spd INTEGER DEFAULT 5"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN cha INTEGER DEFAULT 5"); } catch {}
+
   // Migrate game_log to support extended event_type values (pvp, shop, skill, strategy)
   try {
     db.exec("ALTER TABLE game_log RENAME TO game_log_old");
@@ -236,5 +246,91 @@ function createTables(db: Database.Database): void {
     )`);
     db.exec("INSERT INTO game_log SELECT * FROM game_log_old");
     db.exec("DROP TABLE game_log_old");
+  } catch {}
+
+  // Agent buffs/debuffs
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_buffs (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      buff_name TEXT NOT NULL,
+      buff_type TEXT NOT NULL CHECK(buff_type IN ('buff','debuff')),
+      effect TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    )
+  `);
+
+  // Dev events log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dev_events (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      data TEXT,
+      reward_summary TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    )
+  `);
+
+  // Migrate game_log to support dev and buff event types
+  try {
+    db.exec("ALTER TABLE game_log RENAME TO game_log_old2");
+    db.exec(`CREATE TABLE game_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp   TEXT NOT NULL DEFAULT (datetime('now')),
+      agent_id    TEXT REFERENCES agents(id) ON DELETE SET NULL,
+      event_type  TEXT NOT NULL CHECK(event_type IN ('combat','death','levelup','move','trade','loot','pvp','shop','skill','strategy','dev','buff')),
+      message     TEXT NOT NULL,
+      location_id TEXT REFERENCES locations(id) ON DELETE SET NULL
+    )`);
+    db.exec("INSERT INTO game_log SELECT * FROM game_log_old2");
+    db.exec("DROP TABLE game_log_old2");
+  } catch {}
+
+  // Active battles — per-tick combat state
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS active_battles (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      monster_id TEXT,
+      opponent_id TEXT,
+      agent_hp INTEGER NOT NULL,
+      monster_hp INTEGER NOT NULL,
+      monster_hp_start INTEGER,
+      monster_name TEXT,
+      monster_level INTEGER,
+      monster_attack INTEGER,
+      monster_defense INTEGER,
+      rounds TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'in_progress',
+      location_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    )
+  `);
+
+  // New agent columns for current_action and previous_location_id
+  try { db.exec("ALTER TABLE agents ADD COLUMN current_action TEXT DEFAULT '{\"type\":\"idle\"}'"); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN previous_location_id TEXT"); } catch {}
+
+  // Add last_heartbeat column for dev integration heartbeat tracking
+  try { db.exec("ALTER TABLE agents ADD COLUMN last_heartbeat TEXT"); } catch {}
+
+  // Migrate game_log to support online and offline event types
+  try {
+    db.exec("ALTER TABLE game_log RENAME TO game_log_old3");
+    db.exec(`CREATE TABLE game_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp   TEXT NOT NULL DEFAULT (datetime('now')),
+      agent_id    TEXT REFERENCES agents(id) ON DELETE SET NULL,
+      event_type  TEXT NOT NULL CHECK(event_type IN ('combat','death','levelup','move','trade','loot','pvp','shop','skill','strategy','dev','buff','online','offline')),
+      message     TEXT NOT NULL,
+      location_id TEXT REFERENCES locations(id) ON DELETE SET NULL
+    )`);
+    db.exec("INSERT INTO game_log SELECT * FROM game_log_old3");
+    db.exec("DROP TABLE game_log_old3");
   } catch {}
 }

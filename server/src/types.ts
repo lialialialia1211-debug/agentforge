@@ -14,6 +14,15 @@ export interface Agent {
   status: 'idle' | 'combat' | 'traveling' | 'dead';
   created_at: string;
   updated_at: string;
+  last_heartbeat: string | null;
+  class: string;
+  primary_language: string;
+  str: number;
+  int_stat: number;
+  agi: number;
+  vit: number;
+  spd: number;
+  cha: number;
 }
 
 export interface Location {
@@ -72,7 +81,7 @@ export interface GameLogEntry {
   id: number;
   timestamp: string;
   agent_id: string | null;
-  event_type: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'pvp' | 'shop' | 'skill' | 'strategy';
+  event_type: 'combat' | 'death' | 'levelup' | 'move' | 'trade' | 'loot' | 'pvp' | 'shop' | 'skill' | 'strategy' | 'dev' | 'buff';
   message: string;
   location_id: string | null;
 }

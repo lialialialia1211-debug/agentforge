@@ -16,6 +16,9 @@ import pvpRouter from './routes/pvp.js';
 import tradeRouter from './routes/trade.js';
 import shopRouter from './routes/shop.js';
 import strategyRouter from './routes/strategy.js';
+import devEventRouter from './routes/dev-event.js';
+import heartbeatRouter from './routes/heartbeat.js';
+import claudeMdRouter from './routes/claude-md.js';
 
 const app = express();
 app.use(cors());
@@ -33,6 +36,9 @@ app.use('/api', pvpRouter);        // POST /api/pvp
 app.use('/api', tradeRouter);      // POST /api/trade
 app.use('/api', shopRouter);       // POST /api/shop
 app.use('/api', strategyRouter);   // POST /api/strategy
+app.use('/api', devEventRouter);   // POST /api/dev-event
+app.use('/api', heartbeatRouter);  // POST /api/heartbeat
+app.use('/api', claudeMdRouter);   // GET  /api/claude-md
 
 // Serve dashboard static files at root
 app.use(express.static(resolve(__dirname, '../../dashboard')));
@@ -69,5 +75,5 @@ console.log('Auto-tick engine started (10s interval).');
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`AgentForge server running on port ${PORT}`);
+  console.log(`CodeMud server running on port ${PORT}`);
 });

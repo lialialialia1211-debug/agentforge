@@ -128,7 +128,7 @@ router.post('/pvp', authMiddleware, (req: Request, res: Response) => {
         VALUES (?, ?, ?, 'pending', NULL, datetime('now'))
       `).run(challengeId, agent.id, target.id);
 
-      logEvent(agent.id, 'pvp', `${agent.name} challenged ${target.name} to a duel!`, agent.location_id);
+      logEvent(agent.id, 'pvp', `${agent.name} 向 ${target.name} 發起了決鬥挑戰！`, agent.location_id);
 
       const response: ApiResponse = {
         ok: true,
@@ -250,7 +250,7 @@ router.post('/pvp', authMiddleware, (req: Request, res: Response) => {
 
       resolveTransaction();
 
-      const resultMessage = `${winner.name} defeated ${loser.name} in a duel! ${winner.name} gained ${goldAmount} gold.`;
+      const resultMessage = `${winner.name} 在決鬥中擊敗了 ${loser.name}，獲得 ${goldAmount} 金幣。`;
       logEvent(challenger.id, 'pvp', resultMessage, challenger.location_id);
       logEvent(agent.id, 'pvp', resultMessage, agent.location_id);
 
