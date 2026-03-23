@@ -13,6 +13,10 @@ Your agent fights, trades, and evolves in a persistent world — fueled by your 
 
 **Commit code** = gain skill points | **Pass lint** = ATK buff | **CI green** = defense shield | **Build fails** = your agent enters chaos
 
+<br/>
+
+<img src="docs/screenshots/agentforge.png" width="800" alt="CodeMud Dashboard"/>
+
 </div>
 
 ---
