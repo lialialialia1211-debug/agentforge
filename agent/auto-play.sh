@@ -1,24 +1,26 @@
 #!/bin/bash
-# AgentForge Auto-Play Test Script
-# Usage: bash agent/auto-play.sh <server_url> <agent_name>
+# CodeMud Auto-Play Script
+# Usage: bash agent/auto-play.sh <server_url> <agent_name> [language]
 
 SERVER=$1
 NAME=$2
+LANG=${3:-typescript}
 
 if [ -z "$SERVER" ] || [ -z "$NAME" ]; then
-  echo "Usage: bash auto-play.sh <server_url> <agent_name>"
+  echo "Usage: bash auto-play.sh <server_url> <agent_name> [language]"
+  echo "  language: python, rust, typescript, go, java, c, ruby (default: typescript)"
   exit 1
 fi
 
 # Helper: extract JSON field using python
 jq_py() {
-  python -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null
+  python3 -c "import sys,json; d=json.load(sys.stdin); print($1)" 2>/dev/null
 }
 
-echo "=== Registering $NAME ==="
+echo "=== CodeMud: Registering $NAME (${LANG}) ==="
 REGISTER=$(curl -s -X POST "$SERVER/api/register" \
   -H "Content-Type: application/json" \
-  -d "{\"name\": \"$NAME\"}")
+  -d "{\"name\": \"$NAME\", \"language\": \"$LANG\"}")
 
 TOKEN=$(echo "$REGISTER" | jq_py "d['data']['agent']['token']")
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "None" ]; then
@@ -26,7 +28,9 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" = "None" ]; then
   echo "Registration failed: $ERROR"
   exit 1
 fi
-echo "Registered! Token: $TOKEN"
+
+CLASS=$(echo "$REGISTER" | jq_py "d['data']['agent']['class']")
+echo "Registered! Class: $CLASS | Token: $TOKEN"
 
 AUTH="Authorization: Bearer $TOKEN"
 
@@ -44,12 +48,11 @@ for i in $(seq 1 20); do
   LOCATION=$(echo "$STATUS" | jq_py "d['data']['agent']['location_id']")
   LEVEL=$(echo "$STATUS" | jq_py "d['data']['agent']['level']")
   GOLD=$(echo "$STATUS" | jq_py "d['data']['agent']['gold']")
-  AGENT_STATUS=$(echo "$STATUS" | jq_py "d['data']['agent']['status']")
 
-  echo "Lv.$LEVEL | HP: $HP/$MAX_HP | Gold: $GOLD | Location: $LOCATION | Status: $AGENT_STATUS"
+  echo "Lv.$LEVEL | HP: $HP/$MAX_HP | Gold: $GOLD | Location: $LOCATION"
 
   # If HP low and in town, rest
-  if [ "$HP" -lt $((MAX_HP / 3)) ] && [[ "$LOCATION" == *"village"* || "$LOCATION" == *"market"* ]]; then
+  if [ "$HP" -lt $((MAX_HP / 3)) ] && [[ "$LOCATION" == *"terminal"* || "$LOCATION" == *"bazaar"* ]]; then
     echo "-> Resting at town..."
     REST=$(curl -s -X POST "$SERVER/api/rest" -H "$AUTH")
     echo "   $(echo "$REST" | jq_py "d['data']['message']")"
@@ -57,32 +60,31 @@ for i in $(seq 1 20); do
     continue
   fi
 
-  # If HP low and not in town, retreat
+  # If HP low, use potion or retreat
   if [ "$HP" -lt $((MAX_HP / 3)) ]; then
-    echo "-> HP low, retreating..."
-    # Try using a potion first
+    echo "-> HP low, trying potion..."
     USE=$(curl -s -X POST "$SERVER/api/use" -H "$AUTH" \
       -H "Content-Type: application/json" \
-      -d '{"item_id": "hp_potion_s", "action": "use"}')
+      -d '{"item_id": "debug_potion", "action": "use"}')
     USE_OK=$(echo "$USE" | jq_py "d['ok']")
     if [ "$USE_OK" = "True" ]; then
       echo "   $(echo "$USE" | jq_py "d['data']['message']")"
     else
-      echo "   No potions, moving to starter_village..."
+      echo "   No potions, retreating to The Terminal..."
       curl -s -X POST "$SERVER/api/move" -H "$AUTH" \
         -H "Content-Type: application/json" \
-        -d '{"destination": "starter_village"}' > /dev/null
+        -d '{"destination": "spawn_terminal"}' > /dev/null
     fi
     sleep 3
     continue
   fi
 
   # If in town with decent HP, go hunt
-  if [[ "$LOCATION" == *"village"* || "$LOCATION" == *"market"* ]]; then
-    echo "-> Heading to dark_forest..."
+  if [[ "$LOCATION" == *"terminal"* || "$LOCATION" == *"bazaar"* ]]; then
+    echo "-> Heading to NPM Commons..."
     MOVE=$(curl -s -X POST "$SERVER/api/move" -H "$AUTH" \
       -H "Content-Type: application/json" \
-      -d '{"destination": "dark_forest"}')
+      -d '{"destination": "npm_commons"}')
     echo "   $(echo "$MOVE" | jq_py "d['data']['message']")"
     sleep 3
     continue
@@ -90,7 +92,7 @@ for i in $(seq 1 20); do
 
   # In wild area, look for monsters
   LOOK=$(curl -s "$SERVER/api/look" -H "$AUTH")
-  MONSTER_INFO=$(echo "$LOOK" | python -c "
+  MONSTER_INFO=$(echo "$LOOK" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 ms=d['data']['monsters']
@@ -113,7 +115,7 @@ else:
     COMBAT_RESULT=$(echo "$RESULT" | jq_py "d['data']['result']")
 
     if [ "$COMBAT_RESULT" = "victory" ]; then
-      SUMMARY=$(echo "$RESULT" | python -c "
+      SUMMARY=$(echo "$RESULT" | python3 -c "
 import sys,json
 r=json.load(sys.stdin)['data']
 parts=[f'Victory! +{r[\"expGained\"]} EXP, +{r[\"goldGained\"]} gold']
@@ -126,10 +128,10 @@ print(' | '.join(parts))
 " 2>/dev/null)
       echo "   $SUMMARY"
     else
-      echo "   Defeated! Lost gold, respawning at starter_village..."
+      echo "   Defeated! Respawning at The Terminal..."
     fi
   else
-    echo "-> No monsters here, waiting for respawn..."
+    echo "-> No monsters here, waiting..."
   fi
 
   sleep 3
@@ -138,18 +140,18 @@ done
 echo ""
 echo "=== Final Status ==="
 STATUS=$(curl -s "$SERVER/api/status" -H "$AUTH")
-echo "$STATUS" | python -c "
+echo "$STATUS" | python3 -c "
 import sys,json
-d=json.load(sys.stdin)
-a=d['data']['agent']
-print(f'Name: {a[\"name\"]}')
+d=json.load(sys.stdin)['data']
+a=d['agent']
+print(f'Name: {a[\"name\"]} ({a[\"class\"]})')
 print(f'Level: {a[\"level\"]} | EXP: {a[\"exp\"]}/{a[\"exp_to_next\"]}')
 print(f'HP: {a[\"hp\"]}/{a[\"max_hp\"]}')
-print(f'ATK: {d[\"data\"][\"effective_attack\"]} | DEF: {d[\"data\"][\"effective_defense\"]}')
+print(f'ATK: {d[\"effective_attack\"]} | DEF: {d[\"effective_defense\"]}')
 print(f'Gold: {a[\"gold\"]}')
 print(f'Location: {a[\"location_id\"]}')
 print('Inventory:')
-for item in d['data']['inventory']:
+for item in d['inventory']:
     eq=' [EQUIPPED]' if item['equipped'] else ''
     print(f'  - {item[\"name\"]} x{item[\"quantity\"]}{eq}')
 " 2>/dev/null
