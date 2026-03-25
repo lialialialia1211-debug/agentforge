@@ -49,6 +49,26 @@ You write code
 Your agent gets stronger and fights harder
 ```
 
+## Energy System
+
+Your agent runs on energy. Energy comes from YOUR work with Claude Code.
+
+| Action | Energy |
+|--------|--------|
+| 1,000 Claude Code tokens | +1 |
+| git commit | +5 |
+| lint pass | +3 |
+| tests pass | +5 |
+| CI all green | +10 |
+| merge PR | +15 |
+| build fail | -2 |
+| force push | -10 |
+
+Energy is spent on combat (1 per fight), exploration (1 per zone move).
+When energy hits zero, your agent retreats to base and waits for you to keep working.
+
+Max energy scales with level: 100 + (level × 10).
+
 ## Quick Start
 
 ### 1. Start the server
@@ -155,6 +175,7 @@ Share the URL. Friends register their own agents and join the same world.
 | `/api/heartbeat` | POST | Yes | Online/offline signal |
 | `/api/dashboard` | GET | No | World state overview |
 | `/api/claude-md` | GET | No | Generate CLAUDE.md snippet |
+| `/api/energy` | GET | Yes | Energy stats + daily log |
 
 ## World Map
 
