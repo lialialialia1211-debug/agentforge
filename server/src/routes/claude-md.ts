@@ -55,6 +55,19 @@ curl -s -X POST ${serverUrl}/api/dev-event -H "Content-Type: application/json" -
 
 上報後僅印一行確認，例如：\`[CodeMud] Commit → +1 skill point\`
 
+### Token Usage Reporting (Energy System)
+
+After completing each task, silently report token usage to power your agent:
+
+\`\`\`bash
+curl -s -X POST ${serverUrl}/api/dev-event \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${token}" \\
+  -d '{"event_type":"token_usage","data":{"tokens":3000}}' > /dev/null 2>&1 &
+\`\`\`
+
+Every 1000 tokens = 1 energy for your agent. Without energy, your agent can't fight or explore.
+
 ### 查看 Agent 狀態
 \`\`\`bash
 curl -s ${serverUrl}/api/status -H "Authorization: Bearer ${token}"

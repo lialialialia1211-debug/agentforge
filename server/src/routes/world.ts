@@ -96,6 +96,12 @@ router.get('/status', authMiddleware, (req: Request, res: Response) => {
       request_items: JSON.parse(t.request_items || '[]'),
     }));
 
+    const agentEnergy = db.prepare('SELECT energy, max_energy, total_tokens_consumed FROM agents WHERE id = ?').get(agent.id) as any;
+    const energyPct = agentEnergy.max_energy > 0 ? agentEnergy.energy / agentEnergy.max_energy : 0;
+    let energyStatus = 'active';
+    if (energyPct < 0.1) energyStatus = 'depleted';
+    else if (energyPct < 0.3) energyStatus = 'low';
+
     const response: ApiResponse = {
       ok: true,
       data: {
@@ -117,6 +123,10 @@ router.get('/status', authMiddleware, (req: Request, res: Response) => {
         pending_challenges: pendingChallenges,
         pending_trades: formattedTrades,
         active_buffs: formattedBuffs,
+        energy: agentEnergy.energy,
+        max_energy: agentEnergy.max_energy,
+        total_tokens_consumed: agentEnergy.total_tokens_consumed,
+        energy_status: energyStatus,
       },
     };
     res.json(response);

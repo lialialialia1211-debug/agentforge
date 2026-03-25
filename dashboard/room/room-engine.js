@@ -81,13 +81,50 @@ var RoomEngine = (function() {
         existing.targetX = a.x;
         existing.targetY = a.y;
         existing.data = a;
+        // If agent is moving to another location, target the exit
+        if (a.current_action && a.current_action.type === 'moving' && roomData.exits) {
+          var destExit = null;
+          for (var ei = 0; ei < roomData.exits.length; ei++) {
+            if (a.current_action.to) {
+              var exitName = roomData.exits[ei].name;
+              if (exitName && a.current_action.to.indexOf(exitName.split(' ')[0]) >= 0 ||
+                  roomData.exits[ei].id === a.current_action.to_id) {
+                destExit = roomData.exits[ei];
+                break;
+              }
+            }
+          }
+          if (destExit) {
+            existing.targetX = destExit.x;
+            existing.targetY = destExit.y;
+          }
+        }
       } else {
-        newEntities.push({
+        var newAgent = {
           type: 'agent', data: a,
           renderX: a.x, renderY: a.y,
           prevX: a.x, prevY: a.y,
           targetX: a.x, targetY: a.y
-        });
+        };
+        // If agent is moving to another location, target the exit
+        if (a.current_action && a.current_action.type === 'moving' && roomData.exits) {
+          var newDestExit = null;
+          for (var nei = 0; nei < roomData.exits.length; nei++) {
+            if (a.current_action.to) {
+              var newExitName = roomData.exits[nei].name;
+              if (newExitName && a.current_action.to.indexOf(newExitName.split(' ')[0]) >= 0 ||
+                  roomData.exits[nei].id === a.current_action.to_id) {
+                newDestExit = roomData.exits[nei];
+                break;
+              }
+            }
+          }
+          if (newDestExit) {
+            newAgent.targetX = newDestExit.x;
+            newAgent.targetY = newDestExit.y;
+          }
+        }
+        newEntities.push(newAgent);
       }
     });
 
@@ -123,6 +160,17 @@ var RoomEngine = (function() {
       }
     });
 
+    // Detect removed monsters for death effect
+    entities.forEach(function(e) {
+      if (e.type === 'monster') {
+        var stillExists = (ents.monsters || []).some(function(m) { return m.id === e.data.id; });
+        if (!stillExists) {
+          addDeathFade(e.renderX, e.renderY);
+          addVictoryBurst(e.renderX, e.renderY);
+        }
+      }
+    });
+
     // Remove entities no longer in data
     entities = entities.filter(function(e) {
       if (e.type === 'agent') return (ents.agents || []).some(function(a) { return a.name === e.data.name; });
@@ -140,10 +188,10 @@ var RoomEngine = (function() {
       var lr = b.latest_round;
       if (!lr) return;
       var key = b.battle_id;
-      var prev = prevBattleRoundCounts[key] || 0;
-      // Simple heuristic: if latest_round exists and we haven't seen it
-      if (lr.damage && !prevBattleRoundCounts['_seen_' + key + '_' + lr.damage + '_' + lr.attacker]) {
-        prevBattleRoundCounts['_seen_' + key + '_' + lr.damage + '_' + lr.attacker] = true;
+      var prevCount = prevBattleRoundCounts[key] || 0;
+      var currentCount = b.round_count || 0;
+      if (currentCount > prevCount) {
+        prevBattleRoundCounts[key] = currentCount;
         var midX = (b.agent_x + b.monster_x) / 2;
         var midY = (b.agent_y + b.monster_y) / 2;
         addSlashEffect(midX, midY);
@@ -151,6 +199,30 @@ var RoomEngine = (function() {
           addDamageFloat(b.monster_x, b.monster_y - 10, lr.damage, true);
         } else {
           addDamageFloat(b.agent_x, b.agent_y - 10, lr.damage, false);
+        }
+      }
+    });
+
+    // Detect newly resolved battles (victory/death)
+    roomData.active_battles.forEach(function(b) {
+      if (b.status === 'resolved') {
+        var resolvedKey = '_resolved_' + b.battle_id;
+        if (!prevBattleRoundCounts[resolvedKey]) {
+          prevBattleRoundCounts[resolvedKey] = true;
+          // Trigger victory burst at monster position
+          addVictoryBurst(b.monster_x, b.monster_y);
+          // Also trigger final slash
+          var midX = (b.agent_x + b.monster_x) / 2;
+          var midY = (b.agent_y + b.monster_y) / 2;
+          addSlashEffect(midX, midY);
+          // Show final damage if available
+          if (b.latest_round && b.latest_round.damage) {
+            if (b.latest_round.attacker === 'agent') {
+              addDamageFloat(b.monster_x, b.monster_y - 10, b.latest_round.damage, true);
+            } else {
+              addDamageFloat(b.agent_x, b.agent_y - 10, b.latest_round.damage, false);
+            }
+          }
         }
       }
     });

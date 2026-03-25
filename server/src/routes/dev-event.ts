@@ -62,7 +62,7 @@ router.post('/dev-event', authMiddleware, (req: Request, res: Response) => {
     const db = getDb();
     const { event_type, data } = req.body as { event_type?: string; data?: Record<string, unknown> };
 
-    const validEventTypes = ['commit', 'test_pass', 'lint_pass', 'build_fail', 'merge', 'ci_green', 'ci_red', 'force_push'];
+    const validEventTypes = ['commit', 'test_pass', 'lint_pass', 'build_fail', 'merge', 'ci_green', 'ci_red', 'force_push', 'token_usage'];
     if (!event_type || !validEventTypes.includes(event_type)) {
       const response: ApiResponse = { ok: false, error: `event_type must be one of: ${validEventTypes.join(', ')}` };
       res.status(400).json(response);
@@ -153,9 +153,51 @@ router.post('/dev-event', authMiddleware, (req: Request, res: Response) => {
       logEvent(db, agent.id, 'dev', logMessage, agent.location_id);
     }
 
+    // === Energy System ===
+    const ENERGY_REWARDS: Record<string, number> = {
+      commit: 5, lint_pass: 3, test_pass: 5, ci_green: 10,
+      build_fail: -2, merge: 15, force_push: -10, ci_red: -5
+    };
+
+    let energyChange = 0;
+
+    if (event_type === 'token_usage') {
+      const tokens = (data?.tokens as number) || 0;
+      energyChange = Math.floor(tokens / 1000);
+      db.prepare('UPDATE agents SET total_tokens_consumed = total_tokens_consumed + ? WHERE id = ?')
+        .run(tokens, agent.id);
+      logMessage = `[能量] ${agent.name} 消耗 ${tokens.toLocaleString()} tokens → +${energyChange} 能量`;
+      rewardSummary = `+${energyChange} energy from ${tokens} tokens`;
+      logEvent(db, agent.id, 'dev', logMessage, agent.location_id);
+    }
+
+    if (ENERGY_REWARDS[event_type] !== undefined) {
+      energyChange += ENERGY_REWARDS[event_type];
+    }
+
+    if (energyChange !== 0) {
+      const currentAgent = db.prepare('SELECT energy, max_energy FROM agents WHERE id = ?').get(agent.id) as { energy: number; max_energy: number };
+      const newEnergy = Math.max(0, Math.min(currentAgent.max_energy, currentAgent.energy + energyChange));
+      const actualChange = newEnergy - currentAgent.energy;
+
+      db.prepare('UPDATE agents SET energy = ?, energy_earned_today = energy_earned_today + ? WHERE id = ?')
+        .run(newEnergy, Math.max(0, actualChange), agent.id);
+
+      db.prepare(`INSERT INTO energy_log (agent_id, type, source, amount, balance_after, details) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(agent.id, energyChange > 0 ? 'earn' : 'spend', event_type, actualChange, newEnergy, JSON.stringify(data ?? {}));
+
+      if (actualChange > 0 && event_type !== 'token_usage') {
+        logEvent(db, agent.id, 'dev', `[能量] ${agent.name} 獲得 ${actualChange} 能量（${event_type}）`, agent.location_id);
+      } else if (actualChange < 0) {
+        logEvent(db, agent.id, 'dev', `[能量] ${agent.name} 失去 ${Math.abs(actualChange)} 能量（${event_type}）`, agent.location_id);
+      }
+    }
+
     // Record in dev_events table
     db.prepare(`INSERT INTO dev_events (id, agent_id, event_type, data, reward_summary) VALUES (?, ?, ?, ?, ?)`)
       .run(crypto.randomUUID(), agent.id, event_type, JSON.stringify(data ?? {}), rewardSummary);
+
+    const updatedAgent = db.prepare('SELECT energy, max_energy FROM agents WHERE id = ?').get(agent.id) as { energy: number; max_energy: number };
 
     const response: ApiResponse = {
       ok: true,
@@ -163,6 +205,9 @@ router.post('/dev-event', authMiddleware, (req: Request, res: Response) => {
         event_type,
         message: logMessage,
         reward_summary: rewardSummary,
+        energy_change: energyChange,
+        energy: updatedAgent.energy,
+        max_energy: updatedAgent.max_energy,
       },
     };
     res.json(response);

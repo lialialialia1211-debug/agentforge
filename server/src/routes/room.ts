@@ -76,7 +76,7 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
 
     // Get agents at this location with their room positions
     const agentRows = db.prepare(`
-      SELECT a.id, a.name, a.level, a.hp, a.max_hp, a.attack, a.defense,
+      SELECT a.id, a.name, a.level, a.hp, a.max_hp, a.energy, a.max_energy, a.attack, a.defense,
              a.class, a.primary_language, a.status, a.room_x, a.room_y, a.direction,
              a.current_action
       FROM agents a
@@ -104,6 +104,13 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
       let currentAction: any = { type: 'idle' };
       try { if (a.current_action) currentAction = JSON.parse(a.current_action); } catch {}
 
+      // Add destination_id for exit matching
+      let destination_id: string | null = null;
+      if (currentAction.type === 'moving' && currentAction.to) {
+        const destLoc = db.prepare('SELECT id FROM locations WHERE name = ?').get(currentAction.to) as any;
+        if (destLoc) destination_id = destLoc.id;
+      }
+
       return {
         name: a.name,
         level: a.level,
@@ -111,6 +118,8 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
         language: a.primary_language,
         hp: a.hp,
         max_hp: a.max_hp,
+        energy: a.energy,
+        max_energy: a.max_energy,
         status: a.status,
         x: a.room_x ?? 400,
         y: a.room_y ?? 250,
@@ -119,6 +128,7 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
         equipped_armor: armor?.name ?? null,
         active_buffs: buffs.map((b: any) => b.buff_name),
         current_action: currentAction,
+        destination_id,
       };
     });
 
@@ -137,8 +147,8 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
       level: m.level,
       hp: m.current_hp,
       max_hp: m.max_hp,
-      x: m.room_x ?? (100 + Math.random() * 600),
-      y: m.room_y ?? (100 + Math.random() * 250),
+      x: m.room_x ?? (150 + Math.random() * 500),
+      y: m.room_y ?? (150 + Math.random() * 170),
       status: m.current_hp <= 0 ? 'dead' : 'wandering',
       direction: m.direction ?? 'left',
     }));
@@ -146,10 +156,12 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
     // Get active battles at this location
     const battleRows = db.prepare(`
       SELECT ab.id as battle_id, a.name as agent_name, a.room_x as agent_x, a.room_y as agent_y,
-             ab.monster_id, ab.monster_name, ab.monster_hp, ab.monster_hp_start, ab.rounds
+             ab.monster_id, ab.monster_name, ab.monster_hp, ab.monster_hp_start, ab.rounds,
+             ab.status as status,
+             ab.combat_agent_x, ab.combat_agent_y, ab.combat_monster_x, ab.combat_monster_y
       FROM active_battles ab
       JOIN agents a ON ab.agent_id = a.id
-      WHERE ab.location_id = ? AND ab.status = 'in_progress'
+      WHERE ab.location_id = ? AND ab.status IN ('in_progress', 'resolved')
     `).all(locationId) as any[];
 
     const activeBattles = battleRows.map((b: any) => {
@@ -162,12 +174,14 @@ router.get('/room/:locationId', (req: Request, res: Response) => {
       return {
         battle_id: b.battle_id,
         agent_name: b.agent_name,
-        agent_x: b.agent_x ?? 400,
-        agent_y: b.agent_y ?? 250,
+        agent_x: b.combat_agent_x ?? b.agent_x ?? 400,
+        agent_y: b.combat_agent_y ?? b.agent_y ?? 250,
         monster_id: b.monster_id,
         monster_name: b.monster_name,
-        monster_x: monster?.x ?? 400,
-        monster_y: monster?.y ?? 200,
+        monster_x: b.combat_monster_x ?? monster?.x ?? 400,
+        monster_y: b.combat_monster_y ?? monster?.y ?? 200,
+        round_count: rounds.length,
+        status: b.status,
         latest_round: latestRound ? {
           attacker: latestRound.attacker,
           damage: latestRound.damage,

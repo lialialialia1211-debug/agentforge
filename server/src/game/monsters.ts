@@ -13,8 +13,8 @@ export function spawnMonsters(db: Database): void {
     .all() as Location[];
 
   const insertMonster = db.prepare(`
-    INSERT INTO active_monsters (id, template_id, location_id, current_hp)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO active_monsters (id, template_id, location_id, current_hp, room_x, room_y)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const countAtLocation = db.prepare(
@@ -38,7 +38,9 @@ export function spawnMonsters(db: Database): void {
       for (let i = 0; i < toSpawn; i++) {
         const template = templates[Math.floor(Math.random() * templates.length)];
         const monsterId = crypto.randomUUID();
-        insertMonster.run(monsterId, template.id, location.id, template.hp);
+        const roomX = Math.round((150 + Math.random() * 500) * 10) / 10;
+        const roomY = Math.round((150 + Math.random() * 170) * 10) / 10;
+        insertMonster.run(monsterId, template.id, location.id, template.hp, roomX, roomY);
       }
     }
   });

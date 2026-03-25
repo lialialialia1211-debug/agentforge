@@ -73,6 +73,8 @@
     .hp-bar-bg { background: var(--border); border-radius: 2px; height: 4px; overflow: hidden; }
     .hp-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
     .hp-bar-label { display: flex; justify-content: space-between; font-size: 9px; color: var(--text); margin-top: 2px; }
+    .energy-bar-fill { height: 100%; border-radius: 1px; transition: width 0.5s ease; }
+    .agent-energy-row { display: flex; align-items: center; }
 
     /* AGENT EXPANDED */
     .agent-expand { padding: 6px 12px 10px; background: rgba(255,255,255,0.015); border-top: 1px solid var(--border); }
@@ -151,6 +153,7 @@
     .badge-skill   { background: rgba(240,136,62,0.15);  color: var(--orange); }
     .badge-pvp     { background: rgba(248,81,73,0.2);    color: var(--red); }
     .badge-default { background: rgba(72,79,88,0.3);     color: var(--text); }
+    .badge-energy  { background: #39d2c015; color: #39d2c0; }
     .feed-row.flash-levelup { background: rgba(227,179,65,0.06); }
     .feed-row.flash-death   { background: rgba(248,81,73,0.06); }
     .feed-row.rare-loot { border: 1px solid rgba(88,166,255,0.35); box-shadow: 0 0 8px rgba(88,166,255,0.12); }
@@ -301,6 +304,11 @@
       <div class="stat-label">Highest Level</div>
       <div class="stat-value" id="statHighLevel" style="color:var(--purple)">—</div>
       <div class="stat-sub" id="statHighLevelSub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">World Energy</div>
+      <div class="stat-value" id="statWorldEnergy" style="color:#39d2c0">—</div>
+      <div class="stat-sub" id="statWorldEnergySub"></div>
     </div>
   </div>
 
@@ -582,6 +590,9 @@ function renderStats() {
   setTxt('statMonstersSub', combatCount + ' in combat');
   setTxt('statKills', s.total_kills !== undefined ? s.total_kills : '—');
   setTxt('statKillsSub', 'all time');
+
+  setTxt('statWorldEnergy', s.total_energy_in_world !== undefined ? s.total_energy_in_world : '—');
+  setTxt('statWorldEnergySub', 'in world');
 
   if (s.highest_level_agent) {
     setTxt('statHighLevel', s.highest_level_agent.level);
@@ -1060,6 +1071,32 @@ function renderAgentList() {
     hpBg.appendChild(hpFill);
     hpWrap.appendChild(hpBg); hpWrap.appendChild(hpLbl);
     card.appendChild(hpWrap);
+
+    if (agent.energy !== undefined && agent.max_energy !== undefined) {
+      var energyRow = document.createElement('div');
+      energyRow.className = 'agent-energy-row hp-bar-wrap';
+      energyRow.style.marginTop = '2px';
+      var energyIcon = document.createElement('span');
+      energyIcon.style.cssText = 'color:#39d2c0;font-size:9px;margin-right:4px;';
+      energyIcon.textContent = '\u26a1';
+      var energyBg = document.createElement('div');
+      energyBg.className = 'hp-bar-bg';
+      energyBg.style.flex = '1';
+      var energyFill = document.createElement('div');
+      energyFill.className = 'energy-bar-fill';
+      var ePct = agent.max_energy > 0 ? agent.energy / agent.max_energy : 0;
+      var eColor = ePct === 0 ? '#484f58' : ePct > 0.6 ? '#39d2c0' : ePct > 0.3 ? '#e3b341' : '#f85149';
+      energyFill.style.width = Math.max(0, Math.min(100, ePct * 100)) + '%';
+      energyFill.style.background = eColor;
+      energyBg.appendChild(energyFill);
+      var energyLbl = document.createElement('span');
+      energyLbl.style.cssText = 'color:#8b949e;font-size:9px;margin-left:4px;';
+      energyLbl.textContent = ePct === 0 ? 'DEPLETED' : agent.energy + '/' + agent.max_energy;
+      energyRow.appendChild(energyIcon);
+      energyRow.appendChild(energyBg);
+      energyRow.appendChild(energyLbl);
+      card.appendChild(energyRow);
+    }
 
     card.addEventListener('click', function() { toggleAgentExpand(agent, card); });
     body.appendChild(card);

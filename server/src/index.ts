@@ -17,9 +17,11 @@ import tradeRouter from './routes/trade.js';
 import shopRouter from './routes/shop.js';
 import strategyRouter from './routes/strategy.js';
 import devEventRouter from './routes/dev-event.js';
+import energyRouter from './routes/energy.js';
 import heartbeatRouter from './routes/heartbeat.js';
 import claudeMdRouter from './routes/claude-md.js';
 import roomRouter from './routes/room.js';
+import { startTelegramBot } from './telegram.js';
 
 const app = express();
 app.use(cors());
@@ -38,6 +40,7 @@ app.use('/api', tradeRouter);      // POST /api/trade
 app.use('/api', shopRouter);       // POST /api/shop
 app.use('/api', strategyRouter);   // POST /api/strategy
 app.use('/api', devEventRouter);   // POST /api/dev-event
+app.use('/api', energyRouter);     // GET /api/energy
 app.use('/api', heartbeatRouter);  // POST /api/heartbeat
 app.use('/api', claudeMdRouter);   // GET  /api/claude-md
 app.use('/api', roomRouter);       // GET /api/room/:locationId
@@ -79,3 +82,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`CodeMud server running on port ${PORT}`);
 });
+
+// Start Telegram bot if token is configured
+startTelegramBot();

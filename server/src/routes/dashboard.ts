@@ -16,6 +16,8 @@ router.get('/dashboard', (req: Request, res: Response) => {
     const highestLevelAgent = db.prepare(
       'SELECT name, level FROM agents ORDER BY level DESC LIMIT 1'
     ).get() as { name: string; level: number } | undefined;
+    const totalEnergyInWorld = (db.prepare('SELECT COALESCE(SUM(energy), 0) as total FROM agents').get() as any).total;
+    const totalTokensConsumed = (db.prepare('SELECT COALESCE(SUM(total_tokens_consumed), 0) as total FROM agents').get() as any).total;
 
     // All agents — show HP, stats, class for dashboard display
     const agentRows = db.prepare(`
@@ -23,7 +25,8 @@ router.get('/dashboard', (req: Request, res: Response) => {
              a.location_id, l.name as location_name, a.status,
              a.class, a.primary_language,
              a.str, a.int_stat, a.agi, a.vit, a.spd, a.cha,
-             a.current_action, a.previous_location_id, a.auto_play, a.last_heartbeat
+             a.current_action, a.previous_location_id, a.auto_play, a.last_heartbeat,
+             a.energy, a.max_energy
       FROM agents a
       JOIN locations l ON a.location_id = l.id
     `).all() as any[];
@@ -83,6 +86,8 @@ router.get('/dashboard', (req: Request, res: Response) => {
         online: agent.last_heartbeat ?
           (new Date(agent.last_heartbeat + 'Z').getTime() > Date.now() - 120000) :
           agent.auto_play === 1,
+        energy: agent.energy,
+        max_energy: agent.max_energy,
       };
     });
 
@@ -171,6 +176,8 @@ router.get('/dashboard', (req: Request, res: Response) => {
           total_monsters: totalMonsters,
           total_kills: totalKills,
           highest_level_agent: highestLevelAgent ?? null,
+          total_energy_in_world: totalEnergyInWorld,
+          total_tokens_consumed: totalTokensConsumed,
         },
         agents,
         locations,

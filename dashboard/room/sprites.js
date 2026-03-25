@@ -120,6 +120,14 @@ function drawAgentUI(ctx, x, y, agent) {
 
   ctx.fillStyle = pct > 0.6 ? '#3fb950' : pct > 0.3 ? '#e3b341' : '#f85149';
   ctx.fillRect(barX, barY, barW * pct, barH);
+
+  // Energy display
+  if (agent.energy !== undefined) {
+    ctx.fillStyle = '#39d2c0';
+    ctx.font = '6px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u26a1' + agent.energy, x, y + 18);
+  }
 }
 
 // Monster shape mapping

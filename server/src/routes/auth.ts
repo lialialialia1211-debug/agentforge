@@ -63,9 +63,9 @@ router.post('/register', (req, res) => {
 
     // Insert agent
     db.prepare(`
-      INSERT INTO agents (id, name, token, level, exp, exp_to_next, hp, max_hp, attack, defense, gold, location_id, status,
+      INSERT INTO agents (id, name, token, level, exp, exp_to_next, hp, max_hp, attack, defense, gold, location_id, status, auto_play,
                           class, primary_language, str, int_stat, agi, vit, spd, cha)
-      VALUES (?, ?, ?, 1, 0, ?, 100, 100, 10, 5, 50, 'spawn_terminal', 'idle',
+      VALUES (?, ?, ?, 1, 0, ?, 100, 100, 10, 5, 50, 'spawn_terminal', 'idle', 1,
               ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(agentId, trimmedName, token, expToNext,
            talent.class, primaryLanguage, talent.str, talent.int_stat, talent.agi, talent.vit, talent.spd, talent.cha);

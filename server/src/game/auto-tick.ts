@@ -3,6 +3,7 @@ import type { Database } from 'better-sqlite3';
 import { runCombat } from './combat.js';
 import { rollLoot } from './loot.js';
 import { getCombatBonus, grantSkillExp, getTradeBonus } from './skills.js';
+import { notifyTelegram } from '../telegram-notify.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,6 +106,10 @@ interface BattleRound {
 // Log helper
 // ---------------------------------------------------------------------------
 
+const NOTIFY_ICONS: Record<string, string> = {
+  death: '💀', levelup: '🎉', pvp: '🏆', skill: '📈', buff: '🛡', loot: '💎',
+};
+
 function logEvent(
   db: Database,
   agentId: string,
@@ -116,6 +121,15 @@ function logEvent(
     INSERT INTO game_log (agent_id, event_type, message, location_id)
     VALUES (?, ?, ?, ?)
   `).run(agentId, eventType, message, locationId);
+
+  // Telegram push for important events
+  const notifyTypes = ['death', 'levelup', 'pvp', 'skill', 'buff'];
+  const isRareLoot = eventType === 'loot' && /blue|purple|legendary/i.test(message);
+
+  if (notifyTypes.includes(eventType) || isRareLoot) {
+    const icon = NOTIFY_ICONS[eventType] || '📌';
+    notifyTelegram(agentId, `${icon} ${message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +290,11 @@ function doMove(db: Database, agent: AgentWithStrategy, destinationId: string): 
   db.prepare(`UPDATE agents SET previous_location_id = location_id WHERE id = ?`).run(agent.id);
   db.prepare(`UPDATE agents SET location_id = ?, current_action = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(destinationId, JSON.stringify({ type: 'moving', from: currentLocation?.name ?? agent.location_id, to: destLocation.name }), agent.id);
+
+  // Consume energy for moving to wild areas
+  if (destLocation.type === 'wild' || destLocation.type === 'dungeon') {
+    consumeEnergy(db, agent, 1, 'explore');
+  }
 
   const scoutResult = grantSkillExp(db, agent.id, 'scout', 1);
   if (scoutResult?.leveled) {
@@ -535,8 +554,9 @@ function resolveVictory(
   const lootTable = monsterTemplate?.loot_table ?? null;
 
   const victoryTx = db.transaction(() => {
-    // Delete battle record
-    db.prepare('DELETE FROM active_battles WHERE id = ?').run(battle.id);
+    // Mark battle as resolved (keep for 15s so client can see final state)
+    db.prepare("UPDATE active_battles SET status = 'resolved', rounds = ? WHERE id = ?")
+      .run(JSON.stringify(rounds), battle.id);
 
     // Delete active monster
     if (battle.monster_id) {
@@ -571,15 +591,16 @@ function resolveVictory(
     }
 
     // Update agent
+    const newMaxEnergy = 100 + newLevel * 10;
     db.prepare(`
       UPDATE agents
       SET hp = ?, max_hp = ?, attack = ?, defense = ?, gold = gold + ?,
-          exp = ?, exp_to_next = ?, level = ?, status = 'idle',
+          exp = ?, exp_to_next = ?, level = ?, max_energy = ?, status = 'idle',
           current_action = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(
       finalHp, newMaxHp, newAttack, newDefense, goldGained,
-      newExp, expToNext, newLevel,
+      newExp, expToNext, newLevel, newMaxEnergy,
       JSON.stringify({ type: 'idle' }),
       agent.id
     );
@@ -623,8 +644,8 @@ function resolveDefeat(
   const respawnHp = Math.floor(agent.max_hp * 0.5);
 
   const defeatTx = db.transaction(() => {
-    // Delete battle record
-    db.prepare('DELETE FROM active_battles WHERE id = ?').run(battle.id);
+    // Mark battle as resolved (keep for 15s so client can see final state)
+    db.prepare("UPDATE active_battles SET status = 'resolved' WHERE id = ?").run(battle.id);
 
     db.prepare(`
       UPDATE agents
@@ -718,10 +739,33 @@ function startBattle(db: Database, agent: AgentWithStrategy, monster: MonsterRow
   db.prepare(`UPDATE agents SET status = 'combat', current_action = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(JSON.stringify({ type: 'attacking', target: monster.name, target_hp: monster.current_hp, target_max_hp: monster.current_hp }), agent.id);
 
+  // Move agent near the monster for visual proximity
+  const monsterPos = db.prepare('SELECT room_x, room_y FROM active_monsters WHERE id = ?').get(monster.id) as { room_x: number | null; room_y: number | null } | undefined;
+  if (monsterPos && monsterPos.room_x != null && monsterPos.room_y != null) {
+    // Position agent 30px to the left of the monster
+    const agentX = monsterPos.room_x - 30;
+    const agentY = monsterPos.room_y;
+    const direction = 'right';
+    db.prepare('UPDATE agents SET room_x = ?, room_y = ?, direction = ? WHERE id = ?')
+      .run(Math.round(agentX * 10) / 10, Math.round(agentY * 10) / 10, direction, agent.id);
+  }
+
+  // Snapshot combat positions into the battle record
+  const agentPos = db.prepare('SELECT room_x, room_y FROM agents WHERE id = ?').get(agent.id) as { room_x: number; room_y: number };
+  const combatAgentX = agentPos?.room_x ?? 400;
+  const combatAgentY = agentPos?.room_y ?? 250;
+  const combatMonsterX = monsterPos?.room_x ?? 400;
+  const combatMonsterY = monsterPos?.room_y ?? 250;
+  db.prepare('UPDATE active_battles SET combat_agent_x = ?, combat_agent_y = ?, combat_monster_x = ?, combat_monster_y = ? WHERE id = ?')
+    .run(combatAgentX, combatAgentY, combatMonsterX, combatMonsterY, battleId);
+
   logEvent(db, agent.id, 'combat', `${agent.name} 向 ${monster.name} 發起攻擊！`, agent.location_id);
 
-  // Do NOT execute first round here — wait for next tick
-  // This ensures dashboard can see the battle before it resolves
+  // Execute first round immediately so client can see damage
+  const freshBattle = db.prepare("SELECT * FROM active_battles WHERE id = ?").get(battleId) as ActiveBattleRow;
+  if (freshBattle) {
+    tickBattle(db, agent, freshBattle);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -952,6 +996,18 @@ function acceptPvpChallenge(db: Database, agent: AgentWithStrategy, challenge: P
 }
 
 // ---------------------------------------------------------------------------
+// Helper: consumeEnergy — deduct energy and log it
+// ---------------------------------------------------------------------------
+
+function consumeEnergy(db: Database, agent: AgentWithStrategy, amount: number, source: string): void {
+  const current = (db.prepare('SELECT energy FROM agents WHERE id = ?').get(agent.id) as any)?.energy ?? 0;
+  const newEnergy = Math.max(0, current - amount);
+  db.prepare('UPDATE agents SET energy = ? WHERE id = ?').run(newEnergy, agent.id);
+  db.prepare(`INSERT INTO energy_log (agent_id, type, source, amount, balance_after) VALUES (?, 'spend', ?, ?, ?)`)
+    .run(agent.id, source, -amount, newEnergy);
+}
+
+// ---------------------------------------------------------------------------
 // Core per-agent tick logic
 // ---------------------------------------------------------------------------
 
@@ -967,6 +1023,28 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
 
   const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(agent.location_id) as LocationRow | undefined;
   if (!location) return;
+
+  // === Energy System: check energy ===
+  const currentEnergy = (db.prepare('SELECT energy FROM agents WHERE id = ?').get(agent.id) as any)?.energy ?? 0;
+
+  if (currentEnergy <= 0) {
+    // No energy — can only rest in town or retreat to town
+    if (location.type === 'town') {
+      if (agent.hp < agent.max_hp) {
+        doRest(db, agent);
+        return;
+      }
+      // Idle in town waiting for energy
+      db.prepare(`UPDATE agents SET current_action = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(JSON.stringify({ type: 'idle', reason: 'no_energy' }), agent.id);
+      logEvent(db, agent.id, 'move', `${agent.name} 能量耗盡，在 ${location.name} 等待能量補充...`, agent.location_id);
+      return;
+    }
+    // Not in town — retreat to nearest town (free)
+    moveTowardsTown(db, agent, location);
+    logEvent(db, agent.id, 'move', `${agent.name} 能量耗盡，緊急返回安全區！`, agent.location_id);
+    return;
+  }
 
   // Check for active battle FIRST — one round per tick
   const activeBattle = db.prepare(
@@ -1052,6 +1130,7 @@ function tickAgent(db: Database, agent: AgentWithStrategy): void {
   if (monsters.length > 0) {
     const target = pickTarget(monsters, agent);
     if (target) {
+      consumeEnergy(db, agent, 1, 'combat');
       startBattle(db, agent, target);
       return;
     }
@@ -1097,10 +1176,16 @@ function updateEntityPositions(db: Database): void {
       continue;
     }
 
+    // Skip wander if agent has a recent battle (resolved or in_progress)
+    const recentBattle = db.prepare(
+      "SELECT id FROM active_battles WHERE agent_id = ? AND status IN ('in_progress', 'resolved')"
+    ).get(agent.id);
+    if (recentBattle) continue;
+
     // 30% chance to pick a new wander destination each tick
     if (Math.random() < 0.3) {
-      const targetX = ROOM_MARGIN + Math.random() * (ROOM_WIDTH - ROOM_MARGIN * 2);
-      const targetY = ROOM_MARGIN + 60 + Math.random() * (ROOM_HEIGHT - ROOM_MARGIN * 2 - 60);
+      const targetX = 120 + Math.random() * 560;  // 120-680
+      const targetY = 130 + Math.random() * 210;  // 130-340
       const dx = targetX - x;
       const dy = targetY - y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1129,11 +1214,11 @@ function updateEntityPositions(db: Database): void {
     let x = monster.room_x;
     let y = monster.room_y;
 
-    // Initialize position if null
-    if (x == null || y == null) {
-      x = ROOM_MARGIN + Math.random() * (ROOM_WIDTH - ROOM_MARGIN * 2);
-      y = ROOM_MARGIN + 80 + Math.random() * (ROOM_HEIGHT - ROOM_MARGIN * 2 - 80);
-      db.prepare('UPDATE active_monsters SET room_x = ?, room_y = ? WHERE id = ?')
+    // Initialize or reset position if null or out of bounds
+    if (x == null || y == null || x < 150 || x > 650 || y < 150 || y > 320) {
+      x = 150 + Math.random() * 500;  // 150-650
+      y = 150 + Math.random() * 170;  // 150-320
+      db.prepare('UPDATE active_monsters SET room_x = ?, room_y = ?, wander_target_x = NULL, wander_target_y = NULL WHERE id = ?')
         .run(Math.round(x * 10) / 10, Math.round(y * 10) / 10, monster.id);
       continue;
     }
@@ -1144,8 +1229,8 @@ function updateEntityPositions(db: Database): void {
     // Pick new wander target if none or reached
     if (targetX == null || targetY == null || (Math.abs(x - targetX) < MONSTER_SPEED && Math.abs(y - targetY) < MONSTER_SPEED)) {
       // Wander within a small radius of current position
-      targetX = Math.max(ROOM_MARGIN, Math.min(ROOM_WIDTH - ROOM_MARGIN, x + (Math.random() - 0.5) * 120));
-      targetY = Math.max(ROOM_MARGIN + 60, Math.min(ROOM_HEIGHT - ROOM_MARGIN, y + (Math.random() - 0.5) * 80));
+      targetX = Math.max(150, Math.min(650, x + (Math.random() - 0.5) * 120));
+      targetY = Math.max(150, Math.min(320, y + (Math.random() - 0.5) * 80));
     }
 
     const dx = targetX - x;
@@ -1159,6 +1244,10 @@ function updateEntityPositions(db: Database): void {
       x = targetX;
       y = targetY;
     }
+
+    // Clamp to room bounds
+    x = Math.max(150, Math.min(650, x));
+    y = Math.max(150, Math.min(320, y));
 
     const direction = dx > 0 ? 'right' : 'left';
     db.prepare('UPDATE active_monsters SET room_x = ?, room_y = ?, direction = ?, wander_target_x = ?, wander_target_y = ? WHERE id = ?')
@@ -1177,18 +1266,8 @@ export function runAutoTick(db: Database): void {
   // Clean stale battles from previous server sessions (older than 5 minutes)
   db.prepare("DELETE FROM active_battles WHERE status = 'in_progress' AND datetime(created_at, '+5 minutes') < datetime('now')").run();
 
-  // Auto-offline: agents with no heartbeat in 2 minutes go to sleep
-  const offlineAgents = db.prepare(`
-    SELECT id, name, location_id FROM agents
-    WHERE auto_play = 1
-      AND last_heartbeat IS NOT NULL
-      AND datetime(last_heartbeat, '+2 minutes') < datetime('now')
-  `).all() as { id: string; name: string; location_id: string }[];
-
-  for (const agent of offlineAgents) {
-    db.prepare('UPDATE agents SET auto_play = 0 WHERE id = ?').run(agent.id);
-    logEvent(db, agent.id, 'dev', `${agent.name} 長時間無心跳，Agent 進入休眠。`, agent.location_id);
-  }
+  // Clean up resolved battles older than 15 seconds
+  db.prepare("DELETE FROM active_battles WHERE status = 'resolved' AND datetime(created_at, '+15 seconds') < datetime('now')").run();
 
   const agents = db.prepare(`
     SELECT a.id, a.name, a.level, a.exp, a.exp_to_next, a.hp, a.max_hp, a.attack, a.defense,

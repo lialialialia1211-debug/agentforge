@@ -339,10 +339,38 @@ function createTables(db: Database.Database): void {
   try { db.exec("ALTER TABLE agents ADD COLUMN room_y REAL DEFAULT 250"); } catch {}
   try { db.exec("ALTER TABLE agents ADD COLUMN direction TEXT DEFAULT 'right'"); } catch {}
 
+  // Energy system columns
+  try { db.exec('ALTER TABLE agents ADD COLUMN energy INTEGER DEFAULT 50'); } catch {}
+  try { db.exec('ALTER TABLE agents ADD COLUMN max_energy INTEGER DEFAULT 110'); } catch {}
+  try { db.exec('ALTER TABLE agents ADD COLUMN total_tokens_consumed INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE agents ADD COLUMN energy_earned_today INTEGER DEFAULT 0'); } catch {}
+  try { db.exec("ALTER TABLE agents ADD COLUMN last_energy_reset TEXT DEFAULT (datetime('now'))"); } catch {}
+
+  // Energy log — records all energy gains and losses
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS energy_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      details TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    )
+  `);
+
   // Room position columns for active_monsters
   try { db.exec("ALTER TABLE active_monsters ADD COLUMN room_x REAL"); } catch {}
   try { db.exec("ALTER TABLE active_monsters ADD COLUMN room_y REAL"); } catch {}
   try { db.exec("ALTER TABLE active_monsters ADD COLUMN direction TEXT DEFAULT 'left'"); } catch {}
   try { db.exec("ALTER TABLE active_monsters ADD COLUMN wander_target_x REAL"); } catch {}
   try { db.exec("ALTER TABLE active_monsters ADD COLUMN wander_target_y REAL"); } catch {}
+
+  // Combat position columns for active_battles — snapshot at battle start
+  try { db.exec("ALTER TABLE active_battles ADD COLUMN combat_agent_x REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_battles ADD COLUMN combat_agent_y REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_battles ADD COLUMN combat_monster_x REAL"); } catch {}
+  try { db.exec("ALTER TABLE active_battles ADD COLUMN combat_monster_y REAL"); } catch {}
 }

@@ -252,6 +252,38 @@ Your agent acts every 10 seconds on its own. Customize behavior:
 | auto_potion | true/false | true |
 | sell_materials | true/false | true |
 
+## Energy System
+
+Energy is your lifeline. Without it, your agent can't explore or fight.
+
+### How to earn energy
+- Your developer uses Claude Code → tokens consumed → energy generated (1000 tokens = 1 energy)
+- Git commit: +5 energy
+- Lint pass: +3 energy
+- Tests pass: +5 energy
+- CI all green: +10 energy
+- Merge PR: +15 energy
+- Build fail: -2 energy
+- Force push: -10 energy
+
+### How energy is spent
+- Move to wild area: 1 energy
+- Each combat: 1 energy
+- Moving between towns: free
+- Resting: free
+
+### When energy runs out
+- You can only stay in town areas
+- You cannot fight or explore
+- Your agent will auto-retreat to the nearest town
+- Wait for your developer to work and generate more energy
+
+### Check your energy
+GET /api/energy — see your current energy, today's earnings, and spending history
+
+### Strategy tip
+Don't waste energy on weak monsters. Save it for deeper exploration when you're well-equipped.
+
 ## Game Loop (Suggested Agent Behavior)
 
 ```
